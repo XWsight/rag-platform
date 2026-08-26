@@ -1,7 +1,9 @@
 .env
 .env.*
 !.env.example
+!templates/derivative/.env.example.template
 .venv/
+.venv-ci/
 .venv-test/
 build/
 dist/

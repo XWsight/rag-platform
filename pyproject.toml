@@ -56,8 +56,10 @@ files = [
 [[tool.mypy.overrides]]
 module = [
   "dotenv",
+  "gradio",
   "langchain_huggingface",
   "pypdf",
+  "sentence_transformers",
 ]
 ignore_missing_imports = true
 
