@@ -2,6 +2,7 @@
 
 ARG PYTHON_VERSION=3.12.11
 ARG PYTORCH_CPU_INDEX=https://download.pytorch.org/whl/cpu
+ARG VCS_REF=unknown
 
 FROM python:${PYTHON_VERSION}-slim-bookworm AS wheels
 
@@ -26,6 +27,11 @@ FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
 
 ARG APP_UID=10001
 ARG APP_GID=10001
+ARG VCS_REF
+
+LABEL org.opencontainers.image.title="RAG Studio" \
+      org.opencontainers.image.source="https://github.com/XWsight/rag-system" \
+      org.opencontainers.image.revision="${VCS_REF}"
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

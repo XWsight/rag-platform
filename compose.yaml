@@ -10,6 +10,7 @@ services:
         PYTHON_VERSION: "3.12.11"
         APP_UID: "10001"
         APP_GID: "10001"
+        VCS_REF: "${RAG_SOURCE_REVISION:-unknown}"
     env_file:
       - path: .env
         required: true

@@ -140,6 +140,7 @@ jobs:
           RAG_PRODUCT_TAGLINE=Container smoke test
           RAG_API_KEYS_JSON={"ci-smoke-key-0123456789abcdef":{"subject":"ci","tenant_id":"ci","roles":["reader","writer","operator"]}}
           RAG_IMAGE_TAG=ci-${{ github.run_id }}-${{ github.run_attempt }}
+          RAG_SOURCE_REVISION=${{ github.sha }}
           RAG_DATA_VOLUME=rag-studio-ci-${{ github.run_id }}-${{ github.run_attempt }}
           RAG_BIND_ADDRESS=127.0.0.1
           RAG_PUBLISHED_PORT=8000
@@ -147,6 +148,12 @@ jobs:
           docker compose -p rag-studio-ci config --quiet
       - name: Build hardened image
         run: docker compose -p rag-studio-ci build api
+      - name: Verify image source revision label
+        shell: bash
+        run: |
+          image="rag-studio:ci-${{ github.run_id }}-${{ github.run_attempt }}"
+          revision="$(docker image inspect "$image" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
+          test "$revision" = "${{ github.sha }}"
       - name: Start service and verify health plus authentication
         shell: bash
         run: |
