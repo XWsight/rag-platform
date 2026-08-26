@@ -23,8 +23,18 @@ class LocalIndexBenchmarkTests(unittest.TestCase):
 
     def test_report_states_its_scope_and_each_size(self) -> None:
         report = run(sizes=(5, 8), dimension=4, queries=2, warmup=1, top_k=2)
-        self.assertEqual(report["schema_version"], 1)
+        self.assertEqual(report["schema_version"], 2)
         self.assertIn("excludes embedding", str(report["scope"]))
+        environment = report["environment"]
+        self.assertIsInstance(environment, dict)
+        self.assertTrue(str(environment["python_version"]))
+        self.assertTrue(str(environment["platform"]))
+        self.assertTrue(
+            environment["cpu_count"] is None or isinstance(environment["cpu_count"], int)
+        )
+        configuration = report["configuration"]
+        self.assertEqual(configuration["sizes"], [5, 8])
+        self.assertEqual(configuration["dimension"], 4)
         rows = report["results"]
         self.assertIsInstance(rows, list)
         self.assertEqual([row["chunk_count"] for row in rows], [5, 8])

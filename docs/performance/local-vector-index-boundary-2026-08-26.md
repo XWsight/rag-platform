@@ -40,6 +40,9 @@ python3 scripts/benchmark_local_index.py \
 多租户和并发。因此下列数值只能用于评估精确扫描本身，不能当作 API SLA 或
 端到端检索延迟。
 
+当前脚本的 JSON schema 为 v2；新运行会自动写入参数、Python/平台、可见 CPU 数和可用时的
+源码提交。将来更新本记录时，应保留原始 JSON 并在比较前核对这些环境字段。
+
 ## 原始结果
 
 | chunks | 维度 | top-k | 样本数 | P50 (ms) | P95 (ms) | 平均 (ms) |

@@ -10,6 +10,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import platform
+import re
+import subprocess
 import sys
 import time
 from collections.abc import Iterable
@@ -22,6 +26,9 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from rag_system.domain import Chunk, IndexRef  # noqa: E402
 from rag_system.retrieval import LocalVectorIndex  # noqa: E402
+
+
+_REVISION_PATTERN = re.compile(r"[0-9a-f]{7,64}")
 
 
 def _positive_int(value: str) -> int:
@@ -115,6 +122,18 @@ def benchmark_index(
     }
 
 
+def environment_metadata() -> dict[str, str | int | None]:
+    """Capture portable, non-sensitive context needed to compare benchmark runs."""
+
+    return {
+        "python_version": platform.python_version(),
+        "python_implementation": platform.python_implementation(),
+        "platform": platform.platform(aliased=True),
+        "cpu_count": os.cpu_count(),
+        "source_revision": _source_revision(),
+    }
+
+
 def run(
     *, sizes: tuple[int, ...], dimension: int, queries: int, warmup: int, top_k: int
 ) -> dict[str, object]:
@@ -130,10 +149,34 @@ def run(
         finally:
             index.close()
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "scope": "exact LocalVectorIndex.search only; excludes embedding, persistence, BM25, reranking, network, and concurrency",
+        "environment": environment_metadata(),
+        "configuration": {
+            "sizes": list(sizes),
+            "dimension": dimension,
+            "queries": queries,
+            "warmup": warmup,
+            "top_k": top_k,
+        },
         "results": rows,
     }
+
+
+def _source_revision() -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", "HEAD"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            encoding="ascii",
+            timeout=3,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    revision = result.stdout.strip()
+    return revision if _REVISION_PATTERN.fullmatch(revision) is not None else None
 
 
 def main(argv: list[str] | None = None) -> int:
