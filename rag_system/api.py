@@ -1,18 +1,16 @@
 """Authenticated, tenant-scoped HTTP boundary for the production service."""
 
 import base64
-import hashlib
 import json
 import math
 import re
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from typing import Annotated, Literal
+from typing import Annotated
 
-from fastapi import Depends, FastAPI, File, Form, Header, Path, Query, Request, Security, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, Path, Query, Request, UploadFile
 from fastapi.responses import Response
-from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import Field
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import RequestResponseEndpoint
@@ -38,6 +36,7 @@ from rag_system.api_contract import (
 )
 from rag_system.api_error_handlers import install_error_handlers, safe_emit as _safe_emit
 from rag_system.api_errors import ApiBoundaryError
+from rag_system.api_security import build_api_security_dependencies
 from rag_system.application import RagApplication
 from rag_system.api_uploads import read_uploads as _read_uploads
 from rag_system.domain import AnswerRequest
@@ -120,17 +119,9 @@ def create_app(
 
     install_multipart_openapi_schema(app)
 
-    api_key_scheme = APIKeyHeader(
-        name="X-API-Key",
-        scheme_name="ApiKeyAuth",
-        description="A tenant-scoped service API key.",
-        auto_error=False,
-    )
-    bearer_scheme = HTTPBearer(
-        scheme_name="BearerAuth",
-        bearerFormat="API key",
-        description="The same tenant API key carried as a Bearer credential.",
-        auto_error=False,
+    security = build_api_security_dependencies(
+        authenticator=authenticator,
+        rate_limiter=rate_limiter,
     )
 
     @app.middleware("http")
@@ -146,7 +137,7 @@ def create_app(
         try:
             if request.method == "POST" and request.url.path == "/v1/knowledge-bases":
                 try:
-                    principal = authenticator.authenticate_headers(_raw_headers(request))
+                    principal = security.authenticate_request(request)
                     if not principal.has_role("writer"):
                         raise ApiBoundaryError(
                             403,
@@ -154,10 +145,7 @@ def create_app(
                             "The operation is not permitted.",
                         )
                     request.state.principal = principal
-                    request.state.tenant_hash = hashlib.sha256(
-                        principal.tenant_id.value.encode("utf-8")
-                    ).hexdigest()[:16]
-                    consume(request, principal, tokens=2)
+                    security.consume(request, principal, tokens=2)
                     request.state.upload_rate_preconsumed = True
                 except AuthenticationError:
                     response = _error_response(
@@ -224,51 +212,10 @@ def create_app(
 
     install_error_handlers(app, logger=logger, outcome_for=_outcome_for)
 
-    async def authenticate(
-        request: Request,
-        _api_key: Annotated[str | None, Security(api_key_scheme)],
-        _bearer: Annotated[HTTPAuthorizationCredentials | None, Security(bearer_scheme)],
-    ) -> Principal:
-        del _api_key, _bearer
-        cached = getattr(request.state, "principal", None)
-        if isinstance(cached, Principal):
-            return cached
-        principal = authenticator.authenticate_headers(_raw_headers(request))
-        request.state.principal = principal
-        request.state.tenant_hash = hashlib.sha256(
-            principal.tenant_id.value.encode("utf-8")
-        ).hexdigest()[:16]
-        return principal
-
-    def require_role(role: Literal["reader", "writer", "operator"]) -> Callable[..., object]:
-        async def dependency(
-            principal: Annotated[Principal, Depends(authenticate)],
-        ) -> Principal:
-            if not principal.has_role(role):
-                raise ApiBoundaryError(403, "forbidden", "The operation is not permitted.")
-            return principal
-
-        return dependency
-
-    reader = require_role("reader")
-    writer = require_role("writer")
-    operator = require_role("operator")
-
-    def consume(request: Request, principal: Principal, *, tokens: float = 1.0) -> None:
-        if getattr(request.state, "upload_rate_preconsumed", False):
-            request.state.upload_rate_preconsumed = False
-            return
-        requested = min(float(tokens), rate_limiter.capacity)
-        decision = rate_limiter.acquire(principal.tenant_id.value, tokens=requested)
-        request.state.rate_limit_decision = decision
-        if not decision.allowed:
-            retry_after = max(1, math.ceil(decision.retry_after_seconds))
-            raise ApiBoundaryError(
-                429,
-                "rate_limit_exceeded",
-                "The request rate limit was exceeded.",
-                headers={"Retry-After": str(retry_after)},
-            )
+    reader = security.reader
+    writer = security.writer
+    operator = security.operator
+    consume = security.consume
 
     @app.get(
         "/health/live",
@@ -583,13 +530,6 @@ def _install_receive_limit(request: Request, body_limit: int) -> None:
         return message
 
     request._receive = limited_receive
-
-
-def _raw_headers(request: Request) -> tuple[tuple[str, str], ...]:
-    result: list[tuple[str, str]] = []
-    for name, value in request.scope.get("headers", ()):
-        result.append((name.decode("latin-1"), value.decode("latin-1")))
-    return tuple(result)
 
 
 def _encode_knowledge_base_cursor(record: KnowledgeBaseResponse) -> str:
