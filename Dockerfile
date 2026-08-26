@@ -1,8 +1,11 @@
 # syntax=docker/dockerfile:1.7
 
 ARG PYTHON_VERSION=3.12.11
+ARG PYTORCH_CPU_INDEX=https://download.pytorch.org/whl/cpu
 
 FROM python:${PYTHON_VERSION}-slim-bookworm AS wheels
+
+ARG PYTORCH_CPU_INDEX
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
@@ -12,8 +15,11 @@ COPY requirements.txt ./
 
 # Resolve dependencies once, then install the resulting wheel set without
 # network access in the runtime stage.
+# The service uses embedding inference on CPU.  Prefer PyTorch's CPU wheel so
+# a general-purpose deployment image does not carry CUDA runtime libraries.
 RUN python -m pip install --no-cache-dir --upgrade pip==25.1.1 && \
-    python -m pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
+    python -m pip wheel --no-cache-dir --wheel-dir /wheels \
+      --extra-index-url "${PYTORCH_CPU_INDEX}" -r requirements.txt
 
 
 FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
