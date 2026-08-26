@@ -1,4 +1,4 @@
-"""Run the RAG Studio web application."""
+"""Run the developer-only Gradio workbench; production uses the FastAPI Web UI."""
 
 from __future__ import annotations
 

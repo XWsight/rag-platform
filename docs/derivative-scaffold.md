@@ -24,6 +24,7 @@ python scripts\init_derivative.py `
 - 产品展示配置覆盖示例；
 - 领域评测治理记录：生成时为 `draft`，不会伪造领域基线。
 - `UPSTREAM.md`：生成时自动记录的基座 Git 提交，供后续同步和回滚审查。
+- `compatibility.json`：机器可验证的基座项目、API major 和生成 revision 声明。
 
 脚手架先在同一父目录的临时路径渲染并校验模板，完成后才发布目标目录；渲染异常不会留下可被误提交的半成品派生层。
 若当前副本没有可用 Git 元数据，可用 `--base-revision <commit>` 显式记录经审查的基座提交；否则该记录会显示为 `unrecorded`，必须在首次提交派生层前补齐。
@@ -41,6 +42,9 @@ python scripts\init_derivative.py `
 4. 再增加行业路由、审批或 UI；这些能力必须在派生层实现，而不是修改基座的证据与租户边界。
 5. 每次同步上游前后都运行完整 `scripts/check.ps1` 和你的领域评测；记录基座 commit、数据摘要、
    指标和回滚方式。
+
+同步前额外运行 `python scripts\validate_derivative_compatibility.py <派生目录>\compatibility.json`；
+它会拒绝未知 schema、非 RAG Studio 基座或不兼容的 API major。
 
 ## 领域评测发布门禁
 

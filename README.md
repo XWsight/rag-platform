@@ -112,6 +112,7 @@ npm run test:browser
 ```
 
 它覆盖访问密钥连接、文档上传和索引完成、问答与引用、资料详情、会话清空、删除，以及云端授权默认关闭与显式确认。`scripts/check.ps1` 也会运行该套件。
+Node 工具链固定为 Node 24 与 npm 11；`npm ci` 会拒绝不匹配的锁文件。
 
 如果需要云端生成或联网搜索，再在 `.env` 中配置：
 
@@ -120,9 +121,9 @@ ZHIPU_API_KEY=你的智谱密钥
 ZHIPU_MODEL=glm-5.2
 ```
 
-不配置密钥也能使用本地检索模式。`RAG_ALLOW_CLOUD_DEFAULT` 与 `RAG_ALLOW_WEB_DEFAULT` 只控制 Gradio 界面的初始勾选状态；REST API 始终要求每次请求显式授权。关闭时，问题与文档证据不会被发送到相应外部服务。
+不配置密钥也能使用本地检索模式。`RAG_ALLOW_CLOUD_DEFAULT` 与 `RAG_ALLOW_WEB_DEFAULT` 只控制 Gradio 开发工作台的初始勾选状态；正式产品界面为同源 Web 工作台 `/app`，REST API 始终要求每次请求显式授权。关闭时，问题与文档证据不会被发送到相应外部服务。
 
-运行：
+开发调试工作台（Gradio，不作为正式产品 UI）：
 
 ```powershell
 $env:NO_PROXY = "127.0.0.1,localhost"
@@ -130,7 +131,7 @@ $env:no_proxy = "127.0.0.1,localhost"
 python app.py
 ```
 
-访问 `http://127.0.0.1:7860`。首次使用默认 Embedding 模型时需要下载模型文件。
+访问 `http://127.0.0.1:7860`。首次使用默认 Embedding 模型时需要下载模型文件。正式部署统一使用下方 FastAPI 的 `/app` Web 工作台；新功能应优先进入该界面，避免双 UI 行为分叉。
 
 ## 持久化 API
 

@@ -32,3 +32,11 @@ deployment files, then add domain-specific code here.
 The base contracts described in `docs/customization.md` and `docs/provider-conformance.md` remain
 mandatory. This layer must not bypass claim/citation validation, tenant isolation, or request-level
 outbound authorization.
+# Compatibility
+
+Before upgrading this layer to a newer RAG Studio base, run:
+
+```powershell
+python scripts\validate_derivative_compatibility.py {{PACKAGE_NAME}}\compatibility.json
+python scripts\validate_derivative_evaluation.py {{PACKAGE_NAME}}\evals\governance.json
+```

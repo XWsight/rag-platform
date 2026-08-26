@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "base_project": "rag-studio",
+  "base_revision": "{{BASE_REVISION}}",
+  "base_api_major": 2
+}

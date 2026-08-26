@@ -34,6 +34,10 @@ function Invoke-CheckedGit {
 
 Push-Location $projectRoot
 try {
+    $nodeVersion = (& node --version).Trim()
+    if ($nodeVersion -notmatch '^v24\.') {
+        throw "Node 24 is required for the browser regression suite; found ${nodeVersion}."
+    }
     Invoke-CheckedPython -m compileall -q rag_system tests scripts app.py api_app.py
     Invoke-CheckedPython scripts/scan_secrets.py
     Invoke-CheckedPython scripts/verify_dependency_lock.py

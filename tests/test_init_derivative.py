@@ -14,6 +14,10 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from scripts.init_derivative import create_derivative, main
+from scripts.validate_derivative_compatibility import (
+    DerivativeCompatibilityError,
+    validate_compatibility,
+)
 
 
 class InitDerivativeTests(unittest.TestCase):
@@ -30,6 +34,9 @@ class InitDerivativeTests(unittest.TestCase):
 
             self.assertEqual(created, destination.resolve())
             self.assertTrue((created / "README.md").is_file())
+            compatibility = created / "compatibility.json"
+            self.assertTrue(compatibility.is_file())
+            self.assertTrue(validate_compatibility(compatibility, base_root=Path.cwd())["compatible"])
             provider_factory = (created / "provider_factory.py").read_text(encoding="utf-8")
             self.assertIn("class LegalAssistantProviderFactory", provider_factory)
             self.assertNotIn("{{", provider_factory)
@@ -48,6 +55,23 @@ class InitDerivativeTests(unittest.TestCase):
             self.assertIn("--require-ready", workflow)
             self.assertIn("legal_assistant/evals/governance.json", workflow)
             self.assertNotIn("{{", workflow)
+
+    def test_compatibility_manifest_rejects_an_incompatible_api_major(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = Path(directory) / "compatibility.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "base_project": "rag-studio",
+                        "base_revision": "0123456",
+                        "base_api_major": 3,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaises(DerivativeCompatibilityError):
+                validate_compatibility(manifest, base_root=Path.cwd())
 
     def test_accepts_an_explicit_base_revision_for_a_reproducible_baseline(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -1,4 +1,4 @@
-"""Gradio interface kept separate from retrieval and provider logic."""
+"""Developer-only Gradio workbench kept separate from product Web UI logic."""
 
 from __future__ import annotations
 
