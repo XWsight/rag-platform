@@ -68,6 +68,9 @@ Embedding、持久化、BM25、重排序、网络与并发。因此它用于判�
 现有 `IndexRepository` / `VectorIndex` 接口引入新的 ANN 适配器，而不是对外
 宣称端到端或生产 SLA。
 
+首次可复核的本机边界测量及其环境、命令和限制见
+[本地精确索引规模记录](docs/performance/local-vector-index-boundary-2026-08-26.md)。
+
 ## 本地工作台
 
 要求 Python 3.11 或 3.12。Windows PowerShell：
