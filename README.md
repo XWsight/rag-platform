@@ -1,6 +1,6 @@
 # RAG Studio
 
-[![quality](https://github.com/XWsight/RAG-Search-System/actions/workflows/quality.yml/badge.svg?branch=main)](https://github.com/XWsight/RAG-Search-System/actions/workflows/quality.yml?query=branch%3Amain)
+[![quality](https://github.com/XWsight/rag-system/actions/workflows/quality.yml/badge.svg?branch=main)](https://github.com/XWsight/rag-system/actions/workflows/quality.yml?query=branch%3Amain)
 
 面向中文知识库的隐私优先 RAG 系统：支持安全的多格式文档导入、向量与 BM25 混合检索、RRF 融合、可选重排序、证据路由、联网补充、带引用回答和有预算上限的研究模式。
 
@@ -51,8 +51,8 @@ flowchart LR
 要求 Python 3.11 或 3.12。Windows PowerShell：
 
 ```powershell
-git clone https://github.com/XWsight/RAG-Search-System.git
-cd RAG-Search-System
+git clone https://github.com/XWsight/rag-system.git
+cd rag-system
 git switch main
 
 py -3.11 -m venv .venv
