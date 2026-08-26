@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
+from rag_system.provenance import SourceProvenance
 from scripts.release_manifest import release_manifest, require_clean
 
 
@@ -27,8 +28,12 @@ class ReleaseManifestTests(unittest.TestCase):
                 expected[relative] = hashlib.sha256(content).hexdigest()
             (root / ".env").write_text("SUPER_SECRET=must-not-be-read", encoding="utf-8")
 
-            with patch("scripts.release_manifest._git_revision", return_value="a" * 40), patch(
-                "scripts.release_manifest._working_tree_clean", return_value=True
+            with patch(
+                "scripts.release_manifest.inspect_source_provenance",
+                return_value=SourceProvenance(
+                    revision="a" * 40,
+                    working_tree_clean=True,
+                ),
             ):
                 manifest = release_manifest(
                     root=root,

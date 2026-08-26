@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from scripts.benchmark_local_index import build_synthetic_index, parse_sizes, percentile, run
+from rag_system.provenance import SourceProvenance
 
 
 class LocalIndexBenchmarkTests(unittest.TestCase):
@@ -22,8 +23,18 @@ class LocalIndexBenchmarkTests(unittest.TestCase):
             index.close()
 
     def test_report_states_its_scope_and_each_size(self) -> None:
-        report = run(sizes=(5, 8), dimension=4, queries=2, warmup=1, top_k=2)
-        self.assertEqual(report["schema_version"], 2)
+        report = run(
+            sizes=(5, 8),
+            dimension=4,
+            queries=2,
+            warmup=1,
+            top_k=2,
+            provenance=SourceProvenance(
+                revision="a" * 40,
+                working_tree_clean=True,
+            ),
+        )
+        self.assertEqual(report["schema_version"], 3)
         self.assertIn("excludes embedding", str(report["scope"]))
         environment = report["environment"]
         self.assertIsInstance(environment, dict)
@@ -32,6 +43,8 @@ class LocalIndexBenchmarkTests(unittest.TestCase):
         self.assertTrue(
             environment["cpu_count"] is None or isinstance(environment["cpu_count"], int)
         )
+        self.assertEqual(environment["source_revision"], "a" * 40)
+        self.assertIs(environment["working_tree_clean"], True)
         configuration = report["configuration"]
         self.assertEqual(configuration["sizes"], [5, 8])
         self.assertEqual(configuration["dimension"], 4)

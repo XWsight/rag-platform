@@ -77,6 +77,7 @@ files = [
   "rag_system/metrics.py",
   "rag_system/platform.py",
   "rag_system/ports.py",
+  "rag_system/provenance.py",
   "rag_system/provider_factory.py",
   "rag_system/research.py",
   "rag_system/retrieval.py",

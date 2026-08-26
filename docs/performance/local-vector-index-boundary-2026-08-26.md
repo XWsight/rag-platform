@@ -32,6 +32,7 @@ python3 scripts/benchmark_local_index.py \
   --dimension 384 \
   --queries 30 \
   --warmup 5 \
+  --require-clean \
   --top-k 5
 ```
 
@@ -40,8 +41,9 @@ python3 scripts/benchmark_local_index.py \
 多租户和并发。因此下列数值只能用于评估精确扫描本身，不能当作 API SLA 或
 端到端检索延迟。
 
-当前脚本的 JSON schema 为 v2；新运行会自动写入参数、Python/平台、可见 CPU 数和可用时的
-源码提交。将来更新本记录时，应保留原始 JSON 并在比较前核对这些环境字段。
+当前脚本的 JSON schema 为 v3；新运行会自动写入参数、Python/平台、可见 CPU 数、源码提交和
+工作区是否干净。将来更新本记录时，应保留原始 JSON、在比较前核对这些环境字段，并以 `--require-clean`
+生成可用于正式比较的报告。
 
 ## 原始结果
 

@@ -12,8 +12,6 @@ import argparse
 import json
 import os
 import platform
-import re
-import subprocess
 import sys
 import time
 from collections.abc import Iterable
@@ -25,10 +23,12 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from rag_system.domain import Chunk, IndexRef  # noqa: E402
+from rag_system.provenance import (  # noqa: E402
+    SourceProvenance,
+    inspect_source_provenance,
+    require_clean_source,
+)
 from rag_system.retrieval import LocalVectorIndex  # noqa: E402
-
-
-_REVISION_PATTERN = re.compile(r"[0-9a-f]{7,64}")
 
 
 def _positive_int(value: str) -> int:
@@ -122,20 +122,30 @@ def benchmark_index(
     }
 
 
-def environment_metadata() -> dict[str, str | int | None]:
+def environment_metadata(
+    provenance: SourceProvenance | None = None,
+) -> dict[str, str | int | bool | None]:
     """Capture portable, non-sensitive context needed to compare benchmark runs."""
 
+    source = provenance or inspect_source_provenance(PROJECT_ROOT)
     return {
         "python_version": platform.python_version(),
         "python_implementation": platform.python_implementation(),
         "platform": platform.platform(aliased=True),
         "cpu_count": os.cpu_count(),
-        "source_revision": _source_revision(),
+        "source_revision": source.revision,
+        "working_tree_clean": source.working_tree_clean,
     }
 
 
 def run(
-    *, sizes: tuple[int, ...], dimension: int, queries: int, warmup: int, top_k: int
+    *,
+    sizes: tuple[int, ...],
+    dimension: int,
+    queries: int,
+    warmup: int,
+    top_k: int,
+    provenance: SourceProvenance | None = None,
 ) -> dict[str, object]:
     rows: list[dict[str, float | int]] = []
     for chunk_count in sizes:
@@ -149,9 +159,9 @@ def run(
         finally:
             index.close()
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "scope": "exact LocalVectorIndex.search only; excludes embedding, persistence, BM25, reranking, network, and concurrency",
-        "environment": environment_metadata(),
+        "environment": environment_metadata(provenance),
         "configuration": {
             "sizes": list(sizes),
             "dimension": dimension,
@@ -163,22 +173,6 @@ def run(
     }
 
 
-def _source_revision() -> str | None:
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--verify", "HEAD"],
-            cwd=PROJECT_ROOT,
-            check=True,
-            capture_output=True,
-            encoding="ascii",
-            timeout=3,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    revision = result.stdout.strip()
-    return revision if _REVISION_PATTERN.fullmatch(revision) is not None else None
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sizes", type=parse_sizes, default=(100, 1_000, 5_000))
@@ -187,15 +181,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--warmup", type=_positive_int, default=5)
     parser.add_argument("--top-k", type=_positive_int, default=5)
     parser.add_argument("--json-output", type=Path)
+    parser.add_argument("--require-clean", action="store_true")
     arguments = parser.parse_args(argv)
 
     try:
+        provenance = inspect_source_provenance(PROJECT_ROOT)
+        if arguments.require_clean:
+            require_clean_source(provenance, artifact="a benchmark report")
         report = run(
             sizes=arguments.sizes,
             dimension=arguments.dimension,
             queries=arguments.queries,
             warmup=arguments.warmup,
             top_k=arguments.top_k,
+            provenance=provenance,
         )
     except ValueError as error:
         parser.error(str(error))

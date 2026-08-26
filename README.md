@@ -66,6 +66,7 @@ python scripts\benchmark_local_index.py `
   --dimension 384 `
   --queries 30 `
   --warmup 5 `
+  --require-clean `
   --json-output reports\local-index-boundary.json
 ```
 
@@ -74,8 +75,8 @@ Embedding、持久化、BM25、重排序、网络与并发。因此它用于判�
 现有 `IndexRepository` / `VectorIndex` 接口引入新的 ANN 适配器，而不是对外
 宣称端到端或生产 SLA。
 
-JSON 报告会同时记录基准参数、Python/平台、可见 CPU 数和可用时的源码提交；比较不同机器或
-不同版本的数值前必须先核对这些字段，且仍不能将该微基准解释为端到端 SLA。
+JSON 报告会同时记录基准参数、Python/平台、可见 CPU 数、源码提交和工作区是否干净；比较不同机器或
+不同版本的数值前必须先核对这些字段。用于正式比较的报告应使用 `--require-clean`，且仍不能将该微基准解释为端到端 SLA。
 
 首次可复核的本机边界测量及其环境、命令和限制见
 [本地精确索引规模记录](docs/performance/local-vector-index-boundary-2026-08-26.md)。

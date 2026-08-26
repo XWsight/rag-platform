@@ -5,15 +5,20 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import re
-import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-_REVISION_PATTERN = re.compile(r"[0-9a-f]{7,64}")
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from rag_system.provenance import (  # noqa: E402
+    inspect_source_provenance,
+    require_clean_source,
+)
+
 _INPUTS = (
     "Dockerfile",
     "compose.yaml",
@@ -29,21 +34,27 @@ def release_manifest(*, root: Path = PROJECT_ROOT, generated_at: datetime | None
     resolved_root = root.resolve()
     timestamp = generated_at or datetime.now(UTC)
     files = {relative: _sha256(resolved_root / relative) for relative in _INPUTS}
+    provenance = inspect_source_provenance(resolved_root)
     return {
         "schema_version": 1,
         "generated_at": timestamp.isoformat(),
-        "source_revision": _git_revision(resolved_root),
-        "working_tree_clean": _working_tree_clean(resolved_root),
+        "source_revision": provenance.revision,
+        "working_tree_clean": provenance.working_tree_clean,
         "package_version": _package_version(resolved_root),
         "build_inputs": files,
     }
 
 
 def require_clean(manifest: dict[str, Any]) -> None:
-    if manifest["source_revision"] is None:
-        raise ValueError("a Git source revision is required for a release manifest")
-    if manifest["working_tree_clean"] is not True:
-        raise ValueError("a clean Git working tree is required for a release manifest")
+    from rag_system.provenance import SourceProvenance
+
+    require_clean_source(
+        SourceProvenance(
+            revision=manifest["source_revision"],
+            working_tree_clean=manifest["working_tree_clean"],
+        ),
+        artifact="a release manifest",
+    )
 
 
 def _sha256(path: Path) -> str:
@@ -65,33 +76,6 @@ def _package_version(root: Path) -> str:
     if not isinstance(version, str) or not version.strip():
         raise ValueError("pyproject project version is invalid")
     return version
-
-
-def _git_revision(root: Path) -> str | None:
-    result = _git(root, "rev-parse", "--verify", "HEAD")
-    if result is None:
-        return None
-    revision = result.stdout.strip()
-    return revision if _REVISION_PATTERN.fullmatch(revision) is not None else None
-
-
-def _working_tree_clean(root: Path) -> bool | None:
-    result = _git(root, "status", "--porcelain=v1", "--untracked-files=all")
-    return None if result is None else not bool(result.stdout.strip())
-
-
-def _git(root: Path, *arguments: str) -> subprocess.CompletedProcess[str] | None:
-    try:
-        return subprocess.run(
-            ["git", *arguments],
-            cwd=root,
-            check=True,
-            capture_output=True,
-            encoding="utf-8",
-            timeout=5,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
 
 
 def main(argv: list[str] | None = None) -> int:
