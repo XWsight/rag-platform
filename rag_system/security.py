@@ -82,10 +82,10 @@ def safe_external_url(value: object) -> str:
     try:
         parsed = urlparse(candidate)
         hostname = parsed.hostname
-        _ = parsed.port
+        port = parsed.port
     except ValueError:
         return ""
-    if parsed.scheme not in {"http", "https"} or not hostname:
+    if parsed.scheme not in {"http", "https"} or not hostname or port == 0:
         return ""
     if parsed.username or parsed.password:
         return ""
