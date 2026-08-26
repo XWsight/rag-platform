@@ -64,7 +64,12 @@ module = [
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["rag_system.api", "rag_system.api_error_handlers", "rag_system.web_ui"]
+module = [
+  "rag_system.api",
+  "rag_system.api_error_handlers",
+  "rag_system.api_request_context",
+  "rag_system.web_ui",
+]
 # FastAPI route decorators are dynamically typed. Keep strict checking of
 # function bodies while suppressing this third-party decorator limitation.
 disable_error_code = ["untyped-decorator"]
