@@ -18,7 +18,7 @@ dependencies = [
   "python-dotenv>=1.2,<2",
   "python-multipart>=0.0.32,<0.0.33",
   "requests>=2.34,<3",
-  "sentence-transformers>=5.7,<6",
+  "sentence-transformers>=5.7,<7",
   "uvicorn>=0.52,<0.53",
 ]
 
