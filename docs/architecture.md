@@ -112,7 +112,7 @@ sequenceDiagram
     end
 ```
 
-Catalog 的 `CANCELLING` 与 job 的 `cancelling` 含义不同：前者是 schema v4 中的耐久知识库取消意图，后者是当前进程的执行状态，同时会归档到 job 快照库。正常路径会在发出信号后尽力把知识库立即写成 `FAILED`/`index_cancelled`，但运行中的 worker 在真正退出前仍占用任务容量。如果终态写入失败或进程中断，启动恢复不会重新提交该知识库；同一创建请求的幂等重放也会把残留 `CANCELLING` 收敛为 `FAILED`/`index_cancelled`，并在需要时轮换成新的可轮询 job。
+Catalog 的 `CANCELLING` 与 job 的 `cancelling` 含义不同：前者是 schema v4 中的耐久知识库取消意图，后者是当前进程的执行状态，同时会归档到 job 快照库。正常路径会在发出信号后尽力把知识库立即写成 `FAILED`/`index_cancelled`，但运行中的 worker 在真正退出前仍占用任务容量。如果终态写入失败或进程中断，启动恢复不会重新提交该知识库；同一创建请求的幂等重放会通过统一的恢复工作流，把残留 `CANCELLING` 收敛为 `FAILED`/`index_cancelled`，并在需要时轮换成新的可轮询 job。若 durable reservation 尚未绑定，或旧 job 已从当前进程淘汰，工作流仍只会绑定同一资源，绝不将幂等 key 指向其他知识库。
 
 `READY` 是不可被取消覆盖的 durable commit point。取消到达时若 Catalog 已经是 `READY`，平台不会写入知识库 `CANCELLING`；它仍可向尚未返回的进程内 job 发出信号，因此客户端可能短暂看到 job `cancelling`，但提交成功的任务最终为 `succeeded`，知识库继续保持 `READY`。
 

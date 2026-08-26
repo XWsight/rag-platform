@@ -38,6 +38,7 @@ from rag_system.domain import AnswerRequest, AnswerResult
 from rag_system.file_store import FileStoreError, FileStoreIOError
 from rag_system.idempotency import (
     IdempotencyConflictError,
+    IdempotencyReservation,
     IdempotencyUnavailableError,
 )
 from rag_system.job_contracts import (
@@ -120,79 +121,7 @@ class RagPlatform:
             request_digest,
         )
         if not reservation.created:
-            if not reservation.is_bound:
-                record = self.catalog.find_by_idempotency_reservation(
-                    principal,
-                    reservation.reservation_id,
-                )
-                if record is None:
-                    raise IdempotencyInProgressError(
-                        "matching request is still in progress"
-                    )
-                current_job = self._job_for_resource(principal, record.resource_id)
-                if (
-                    record.status is KnowledgeBaseStatus.CANCELLING
-                    and self._job_is_terminal(principal, current_job)
-                ):
-                    record = self._indexing.converge_cancel_intent(principal, record)
-                    current_job = None
-                if current_job is None and record.status in {
-                    KnowledgeBaseStatus.READY,
-                    KnowledgeBaseStatus.FAILED,
-                }:
-                    current_job = self._submit_status_job(principal, record)
-                if current_job is None:
-                    raise IdempotencyInProgressError(
-                        "matching request recovery is still in progress"
-                    )
-                self._recover_idempotency_binding(principal, record, current_job)
-                return KnowledgeBaseSubmission(record, current_job, replayed=True)
-            bound_resource_id = reservation.resource_id
-            bound_job_id = reservation.job_id
-            if bound_resource_id is None or bound_job_id is None:
-                raise PlatformIntegrityError("bound idempotency result is incomplete")
-            record = self.catalog.get(principal, bound_resource_id)
-            current_job = self._job_for_resource(principal, record.resource_id)
-            if current_job is None:
-                try:
-                    bound_snapshot = self.jobs.get(
-                        principal.tenant_id.value,
-                        JobId(bound_job_id),
-                    )
-                    if (
-                        record.status is KnowledgeBaseStatus.READY
-                        and bound_snapshot.status is not JobStatus.SUCCEEDED
-                    ):
-                        current_job = None
-                    else:
-                        current_job = JobId(bound_job_id)
-                except JobNotFoundError:
-                    current_job = None
-            if (
-                record.status is KnowledgeBaseStatus.CANCELLING
-                and self._job_is_terminal(principal, current_job)
-            ):
-                record = self._indexing.converge_cancel_intent(principal, record)
-                current_job = None
-            if current_job is None and record.status in {
-                KnowledgeBaseStatus.READY,
-                KnowledgeBaseStatus.FAILED,
-            }:
-                current_job = self._submit_status_job(principal, record)
-                self._recover_idempotency_binding(
-                    principal,
-                    record,
-                    current_job,
-                )
-            if current_job is None:
-                raise IdempotencyInProgressError(
-                    "matching request recovery is still in progress"
-                )
-            return KnowledgeBaseSubmission(
-                record,
-                current_job,
-                replayed=True,
-            )
+            return self._replay_submission(principal, reservation)
 
         created_record: KnowledgeBaseRecord | None = None
         job_id: JobId | None = None
@@ -268,6 +197,76 @@ class RagPlatform:
         if created_record is None or job_id is None:
             raise PlatformUnavailableError("knowledge base submission did not complete")
         return KnowledgeBaseSubmission(created_record, job_id, replayed=False)
+
+    def _replay_submission(
+        self,
+        principal: Principal,
+        reservation: IdempotencyReservation,
+    ) -> KnowledgeBaseSubmission:
+        """Converge every durable idempotency replay to one pollable job."""
+
+        record: KnowledgeBaseRecord
+        current_job: JobId | None
+        needs_binding_recovery = not reservation.is_bound
+        if reservation.is_bound:
+            bound_resource_id = reservation.resource_id
+            bound_job_id = reservation.job_id
+            if bound_resource_id is None or bound_job_id is None:
+                raise PlatformIntegrityError("bound idempotency result is incomplete")
+            record = self.catalog.get(principal, bound_resource_id)
+            current_job = self._bound_replay_job(principal, record, bound_job_id)
+        else:
+            unbound_record = self.catalog.find_by_idempotency_reservation(
+                principal,
+                reservation.reservation_id,
+            )
+            if unbound_record is None:
+                raise IdempotencyInProgressError("matching request is still in progress")
+            record = unbound_record
+            current_job = self._job_for_resource(principal, record.resource_id)
+
+        if (
+            record.status is KnowledgeBaseStatus.CANCELLING
+            and self._job_is_terminal(principal, current_job)
+        ):
+            record = self._indexing.converge_cancel_intent(principal, record)
+            current_job = None
+
+        if current_job is None and record.status in {
+            KnowledgeBaseStatus.READY,
+            KnowledgeBaseStatus.FAILED,
+        }:
+            current_job = self._submit_status_job(principal, record)
+            needs_binding_recovery = True
+        if current_job is None:
+            raise IdempotencyInProgressError(
+                "matching request recovery is still in progress"
+            )
+        if needs_binding_recovery:
+            self._recover_idempotency_binding(principal, record, current_job)
+        return KnowledgeBaseSubmission(record, current_job, replayed=True)
+
+    def _bound_replay_job(
+        self,
+        principal: Principal,
+        record: KnowledgeBaseRecord,
+        bound_job_id: str,
+    ) -> JobId | None:
+        """Resolve a retained bound job without trusting an obsolete snapshot."""
+
+        current_job = self._job_for_resource(principal, record.resource_id)
+        if current_job is not None:
+            return current_job
+        try:
+            snapshot = self.jobs.get(principal.tenant_id.value, JobId(bound_job_id))
+        except JobNotFoundError:
+            return None
+        if (
+            record.status is KnowledgeBaseStatus.READY
+            and snapshot.status is not JobStatus.SUCCEEDED
+        ):
+            return None
+        return JobId(bound_job_id)
 
     def get_knowledge_base(
         self,
