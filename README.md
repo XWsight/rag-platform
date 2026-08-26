@@ -46,6 +46,28 @@ flowchart LR
 
 更完整的数据流、模块边界和非目标见[架构文档](docs/architecture.md)。
 
+### 本地向量索引的规模边界
+
+当前密集检索后端是进程内 **精确余弦扫描**，优先保证单节点部署的
+数据边界、可复现性与运维简单性。查询时间会随 chunk 数近似线性增加；
+它不是 ANN，也不应被描述成适合任意规模或多副本部署的向量数据库。
+
+在考虑替换后端前，先在目标机器运行下列无模型下载的微基准并保存 JSON：
+
+```powershell
+python scripts\benchmark_local_index.py `
+  --sizes 100,1000,5000 `
+  --dimension 384 `
+  --queries 30 `
+  --warmup 5 `
+  --json-output reports\local-index-boundary.json
+```
+
+该命令只测 `LocalVectorIndex.search` 的精确扫描与排序，明确排除文档解析、
+Embedding、持久化、BM25、重排序、网络与并发。因此它用于判断何时需要通过
+现有 `IndexRepository` / `VectorIndex` 接口引入新的 ANN 适配器，而不是对外
+宣称端到端或生产 SLA。
+
 ## 本地工作台
 
 要求 Python 3.11 或 3.12。Windows PowerShell：
