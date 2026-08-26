@@ -36,6 +36,7 @@ _EXPECTED_COLUMNS = (
     ("error_code", "TEXT", 1, None, 0),
     ("error_message", "TEXT", 1, None, 0),
 )
+_EXPECTED_UPDATED_INDEX_COLUMNS = ("tenant_id", "updated_at")
 _TERMINAL_STATUSES = tuple(status.value for status in JobStatus if status.terminal)
 _ACTIVE_STATUSES = tuple(status.value for status in JobStatus if not status.terminal)
 
@@ -206,7 +207,22 @@ class SqliteJobSnapshotStore:
             "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?",
             ("idx_job_snapshots_tenant_updated",),
         ).fetchone()
-        if version != _SCHEMA_VERSION or columns != _EXPECTED_COLUMNS or index is None:
+        index_columns = (
+            tuple(
+                str(row[2])
+                for row in connection.execute(
+                    "PRAGMA index_info(idx_job_snapshots_tenant_updated)"
+                ).fetchall()
+            )
+            if index is not None
+            else ()
+        )
+        if (
+            version != _SCHEMA_VERSION
+            or columns != _EXPECTED_COLUMNS
+            or index is None
+            or index_columns != _EXPECTED_UPDATED_INDEX_COLUMNS
+        ):
             raise JobStorageError("job snapshot schema is invalid")
 
     def recover_interrupted(self) -> int:

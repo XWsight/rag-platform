@@ -184,6 +184,18 @@ class JobSnapshotStoreTests(unittest.TestCase):
         with self.assertRaises(JobStorageError):
             SqliteJobSnapshotStore(self.database)
 
+    def test_startup_rejects_an_index_with_the_expected_name_but_wrong_columns(self) -> None:
+        SqliteJobSnapshotStore(self.database)
+        with closing(sqlite3.connect(self.database)) as connection:
+            connection.execute("DROP INDEX idx_job_snapshots_tenant_updated")
+            connection.execute(
+                "CREATE INDEX idx_job_snapshots_tenant_updated ON job_snapshots (status)"
+            )
+            connection.commit()
+
+        with self.assertRaises(JobStorageError):
+            SqliteJobSnapshotStore(self.database)
+
     @staticmethod
     def _wait_for_terminal(manager: JobManager, job_id: JobId) -> None:
         deadline = time.monotonic() + 3
