@@ -18,6 +18,7 @@ from rag_system.provider_errors import (
 )
 from rag_system.providers import (
     ZhipuChatModel,
+    ZhipuProviderFactory,
     ZhipuWebSearch,
 )
 
@@ -75,6 +76,16 @@ def configured_settings(*, retry_attempts: int = 2) -> Settings:
 
 
 class ZhipuChatModelTests(unittest.TestCase):
+    def test_provider_factory_reuses_the_chat_adapter_as_query_planner(self) -> None:
+        providers = ZhipuProviderFactory().create(configured_settings())
+        try:
+            self.assertIsInstance(providers.chat_model, ZhipuChatModel)
+            self.assertIsInstance(providers.web_search, ZhipuWebSearch)
+            self.assertIs(providers.query_planner, providers.chat_model)
+        finally:
+            providers.chat_model.close()
+            providers.web_search.close()
+
     def test_answer_protocol_is_replaceable_without_changing_transport(self) -> None:
         class StubProtocol:
             def __init__(self) -> None:

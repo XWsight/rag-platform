@@ -30,7 +30,8 @@ from rag_system.health import HealthProbe, ReadinessMonitor
 from rag_system.metrics import create_operational_metrics
 from rag_system.observability import JsonEventLogger
 from rag_system.platform import RagPlatform
-from rag_system.providers import ZhipuChatModel, ZhipuWebSearch
+from rag_system.provider_factory import ProviderFactory
+from rag_system.providers import ZhipuProviderFactory
 from rag_system.rate_limit import TokenBucketRateLimiter
 from rag_system.retrieval import LocalVectorIndexRepository
 from rag_system.service import RagService
@@ -154,23 +155,33 @@ class StorageRootLease:
             handle.close()
 
 
-def build_service_from_settings(settings: Settings) -> RagService:
+def build_service_from_settings(
+    settings: Settings,
+    *,
+    provider_factory: ProviderFactory | None = None,
+) -> RagService:
+    """Assemble a service with the default or an explicitly injected provider factory."""
+
     validated = settings.validate()
     repository = LocalVectorIndexRepository(validated)
     manager = IndexManager(validated, repository)
-    chat_model = ZhipuChatModel(validated)
+    providers = (provider_factory or ZhipuProviderFactory()).create(validated)
     return RagService(
         settings=validated,
         index_manager=manager,
-        chat_model=chat_model,
-        web_search=ZhipuWebSearch(validated),
-        query_planner=chat_model,
+        chat_model=providers.chat_model,
+        web_search=providers.web_search,
+        query_planner=providers.query_planner,
     )
 
 
-def build_service(*, dotenv_path: Path | None = None) -> tuple[RagService, Settings]:
+def build_service(
+    *,
+    dotenv_path: Path | None = None,
+    provider_factory: ProviderFactory | None = None,
+) -> tuple[RagService, Settings]:
     settings = load_settings(dotenv_path=dotenv_path)
-    return build_service_from_settings(settings), settings
+    return build_service_from_settings(settings, provider_factory=provider_factory), settings
 
 
 def parse_api_credentials(
@@ -225,7 +236,11 @@ def parse_api_credentials(
     return authenticator, unique_principals
 
 
-def build_production_runtime(*, dotenv_path: Path | None = None) -> ProductionRuntime:
+def build_production_runtime(
+    *,
+    dotenv_path: Path | None = None,
+    provider_factory: ProviderFactory | None = None,
+) -> ProductionRuntime:
     settings = load_settings(dotenv_path=dotenv_path)
     if not settings.persist_data:
         raise ValueError("RAG_PERSIST_DATA must be true for the production API")
@@ -240,7 +255,10 @@ def build_production_runtime(*, dotenv_path: Path | None = None) -> ProductionRu
     try:
         authenticator, principals = parse_api_credentials(settings.api_keys_json)
         metrics = create_operational_metrics()
-        service: KnowledgeService = build_service_from_settings(settings)
+        service: KnowledgeService = build_service_from_settings(
+            settings,
+            provider_factory=provider_factory,
+        )
         catalog: KnowledgeBaseRepository = KnowledgeBaseCatalog(
             storage_root / "catalog.sqlite3"
         )

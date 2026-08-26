@@ -4,8 +4,42 @@ import unittest
 import tempfile
 from pathlib import Path
 
-from rag_system.bootstrap import StorageRootLease, parse_api_credentials
-from rag_system.config import SecretValue
+from rag_system.bootstrap import StorageRootLease, build_service_from_settings, parse_api_credentials
+from rag_system.config import SecretValue, Settings
+from rag_system.domain import GeneratedAnswer, WebSearchResult
+from rag_system.provider_factory import ProviderBundle
+
+
+class _TestChat:
+    available = True
+
+    def answer(self, question: str, evidence: object) -> GeneratedAnswer:
+        return GeneratedAnswer((), insufficient=True)
+
+    def plan_queries(self, question: str, *, max_queries: int) -> tuple[str, ...]:
+        return ()
+
+
+class _TestWebSearch:
+    available = True
+
+    def search(self, query: str, *, count: int) -> tuple[WebSearchResult, ...]:
+        return ()
+
+
+class _TestProviderFactory:
+    def __init__(self) -> None:
+        self.settings: Settings | None = None
+        self.chat_model = _TestChat()
+        self.web_search = _TestWebSearch()
+
+    def create(self, settings: Settings) -> ProviderBundle:
+        self.settings = settings
+        return ProviderBundle(
+            chat_model=self.chat_model,
+            web_search=self.web_search,
+            query_planner=self.chat_model,
+        )
 
 
 class BootstrapTests(unittest.TestCase):
@@ -52,6 +86,16 @@ class BootstrapTests(unittest.TestCase):
 
             second = StorageRootLease.acquire(root)
             second.close()
+
+    def test_service_bootstrap_accepts_an_explicit_provider_factory(self) -> None:
+        factory = _TestProviderFactory()
+
+        service = build_service_from_settings(Settings(), provider_factory=factory)
+
+        self.assertIsNotNone(factory.settings)
+        self.assertIs(service.chat_model, factory.chat_model)
+        self.assertIs(service.web_search, factory.web_search)
+        self.assertIs(service.query_planner, factory.chat_model)
 
 
 if __name__ == "__main__":

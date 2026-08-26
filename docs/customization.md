@@ -18,7 +18,7 @@ RAG Studio 是可派生的通用知识检索基座，而不是某个行业的固
 | --- | --- | --- |
 | 新文档格式或元数据 | `DocumentLoader`、摄取流程 | 路径安全、资源上限、内容摘要和租户隔离 |
 | 新 Embedding、ANN 或重排序器 | `Embedder`、`IndexRepository`、`Reranker` | 索引身份、删除语义、持久化校验和检索回归门禁 |
-| 新模型或联网提供商 | `ChatModel`、`WebSearchProvider`、`QueryPlanner` | 结构化 claims、引用验证、显式出站授权和稳定错误 |
+| 新模型或联网提供商 | 实现 `ChatModel`、`WebSearchProvider`、`QueryPlanner`，并以 `ProviderFactory` 注入 `build_service*` | 结构化 claims、引用验证、显式出站授权和稳定错误 |
 | 行业路由/审批规则 | `RoutingPolicy` 或其上游意图分类器 | 默认拒答、可审计原因、不得将业务关键词直接视为证据 |
 | 数据库、对象存储、任务队列 | `application_ports.py` 中的仓储和执行端口 | 幂等、租户隔离、取消语义、恢复与删除流程 |
 | 用户界面 | `/app` 静态客户端或独立前端 | API Key 不持久化到浏览器、同源 CSP、服务端强制授权 |
@@ -30,6 +30,16 @@ RAG Studio 是可派生的通用知识检索基座，而不是某个行业的固
 3. 为行业文档、无答案问题、权限边界和高风险请求建立独立的 development、validation 与未消费 test 集。
 4. 通过检索、回答、容器和安全回归后，再引入新的端口适配器。
 5. 将所有行业专属提示、词表、审批规则和数据迁移放在派生层；上游基座只保留通用机制。
+
+## 更换默认云端提供商
+
+基座内置的 `ZhipuProviderFactory` 只是默认实现。派生项目应在自己的组合根显式构造
+`ProviderBundle`，再把工厂传给 `build_service`、`build_service_from_settings` 或
+`build_production_runtime`。不要通过环境变量指定 Python 类名或动态导入提供商；那会把部署
+配置变成任意代码执行入口，也会使依赖审计和回滚失去确定性。
+
+自定义工厂只负责装配经过验证的适配器。回答协议、claim/citation 复核、请求级
+`allow_cloud` / `allow_web` 授权和错误脱敏仍由基座执行，不能在适配器中绕过。
 
 ## 不可破坏的基座约束
 

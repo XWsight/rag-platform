@@ -16,6 +16,7 @@ from rag_system.config import Settings
 from rag_system.domain import GeneratedAnswer, WebSearchResult
 from rag_system.grounding import MAX_GROUNDED_ANSWER_CHARACTERS
 from rag_system.json_contract import JsonContractError, decode_json_object
+from rag_system.provider_factory import ProviderBundle
 from rag_system.provider_errors import (
     ProviderAuthenticationError,
     ProviderError,
@@ -410,6 +411,19 @@ class ZhipuWebSearch(_ZhipuHTTPClient):
         return tuple(results)
 
 
+class ZhipuProviderFactory:
+    """Build the bundled Zhipu adapters used when no custom factory is supplied."""
+
+    def create(self, settings: Settings) -> ProviderBundle:
+        validated = settings.validate()
+        chat_model = ZhipuChatModel(validated)
+        return ProviderBundle(
+            chat_model=chat_model,
+            web_search=ZhipuWebSearch(validated),
+            query_planner=chat_model,
+        )
+
+
 __all__ = [
     "ProviderAuthenticationError",
     "ProviderError",
@@ -417,5 +431,6 @@ __all__ = [
     "ProviderRateLimitError",
     "ProviderUnavailableError",
     "ZhipuChatModel",
+    "ZhipuProviderFactory",
     "ZhipuWebSearch",
 ]
