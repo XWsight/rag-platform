@@ -107,6 +107,24 @@ jobs:
           python -m pip install pip-audit==2.10.1
           python scripts/audit_dependencies.py
 
+  release-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Create versioned release-input manifest
+        run: >-
+          python scripts/release_manifest.py
+          --require-clean
+          --json-output reports/release-manifest.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-manifest-${{ github.sha }}
+          path: reports/release-manifest.json
+          if-no-files-found: error
+
   container-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 30

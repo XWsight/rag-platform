@@ -88,6 +88,8 @@ docker image inspect rag-studio:2026.08.11-1 --format '{{json .RepoDigests}}'
 
 正式环境应记录代码提交、镜像 digest、配置版本、数据快照和部署时间。输出为 `[]` 或 `null` 表示镜像尚未推送到仓库，此时不能声称它是可跨主机验证的不可变制品。
 
+仓库 CI 还会保存 `release-manifest-<commit>` 工件，其中记录干净源码提交、包版本及 Dockerfile、Compose、`pyproject.toml`、运行/开发依赖清单的 SHA-256。该清单不读取 `.env`，适合把一次镜像构建关联到其受控输入；它不替代镜像签名、SBOM 或传递依赖哈希锁定。
+
 ## 反向代理
 
 推荐让 Caddy、Nginx 或云负载均衡器在同机或受控内网终止 TLS，再转发到 `127.0.0.1:8000`。代理必须：
