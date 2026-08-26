@@ -24,7 +24,6 @@ FRAMEWORK_NEUTRAL_MODULES = (
     "rag_system/retrieval_experiments.py",
 )
 FORBIDDEN_FRAMEWORK_PREFIXES = (
-    "chromadb",
     "fastapi",
     "gradio",
     "langchain",
@@ -69,7 +68,7 @@ class ArchitectureBoundaryTests(unittest.TestCase):
 
     def test_platform_depends_on_runtime_ports_not_concrete_adapters(self) -> None:
         forbidden = {
-            "ChromaIndexRepository",
+            "LocalVectorIndexRepository",
             "IdempotencyStore",
             "JobManager",
             "KnowledgeBaseCatalog",

@@ -11,7 +11,7 @@
 | 指标夹具 | [`evals/sample_dataset.jsonl`](../evals/sample_dataset.jsonl) | 预先写入的 `retrieved_ids`、`predicted_route`、`answer` 和引用 | JSONL 严格校验、指标公式、引用 ID 审计和报告渲染工作正常 | 当前检索器、Embedding、路由或模型回答的质量 |
 | BM25 smoke baseline | [`evals/retrieval_cases.jsonl`](../evals/retrieval_cases.jsonl) + 4 个 corpus 文档 | 真实 DocumentIngestor 切分、依赖无关的 BM25 检索和当前 RoutingPolicy | 小型开发语料上的确定性回归基线 | 混合检索、真实业务、生成质量、规模/并发表现 |
 | 216-case retrieval suite | [`evals/retrieval_suite.json`](../evals/retrieval_suite.json) + 10 篇来源 | 54 个语义家族的改写鲁棒性、通用负例、来源隔离 split、困难度、路由与完整 BM25 回归 | 更广覆盖下的确定性检索下限和逐题失败资产 | 216 个独立事实、真实客户分布、混合检索或生产 SLA |
-| 真实本地检索基准 | 同一 ground truth + 当前 Chroma/HuggingFace/BM25/RRF/可选 reranker | 实际本地检索结果和路由 | 指定模型与配置在该数据集上的检索/路由结果 | 云生成事实性、真实流量泛化或生产 SLA |
+| 真实本地检索基准 | 同一 ground truth + 当前本地余弦索引/HuggingFace/BM25/RRF/可选 reranker | 实际本地检索结果和路由 | 指定模型与配置在该数据集上的检索/路由结果 | 云生成事实性、真实流量泛化或生产 SLA |
 
 `retrieval_cases.jsonl` 是严格 ground truth，只允许问题、相关来源、期望路由和 `allow_web`；loader 会拒绝混入预测字段。这样可避免把手写预测误当作系统输出。
 
@@ -38,11 +38,11 @@ python scripts/evaluate.py evals/sample_dataset.jsonl --top-k 5 `
   --markdown-output reports/sample-fixture.md
 ```
 
-该文件只有 6 个手工样例，且已经包含“预测”和回答，因此输出只能用于验证评测器。它不会加载文档、创建 Chroma、调用 Embedding、搜索网页或调用模型。报告它时必须称为 **sample fixture**，不能称为项目 Recall、路由准确率或回答质量。
+该文件只有 6 个手工样例，且已经包含“预测”和回答，因此输出只能用于验证评测器。它不会加载文档、创建向量索引、调用 Embedding、搜索网页或调用模型。报告它时必须称为 **sample fixture**，不能称为项目 Recall、路由准确率或回答质量。
 
 ## 2. 18-case BM25 smoke baseline
 
-无需 Chroma、模型下载或云端调用：
+无需向量后端、模型下载或云端调用：
 
 ```powershell
 python scripts/benchmark_sparse.py evals/retrieval_cases.jsonl `

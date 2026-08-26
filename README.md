@@ -8,14 +8,14 @@
 
 Web 工作台覆盖知识库创建、异步索引进度、知识库切换与删除、多轮问答、引用证据、检索路径，以及云端生成和联网搜索的请求级授权。访问密钥只保存在当前浏览器标签会话中，不会写入仓库或持久化到浏览器长期存储。
 
-> 当前生产形态是 **durable single-node**，不是多副本高可用集群。SQLite、Chroma 和上传原文必须位于同一个持久卷，API 只能运行一个 Uvicorn worker。能力边界详见[部署说明](docs/deployment.md)。
+> 当前生产形态是 **durable single-node**，不是多副本高可用集群。SQLite、受限本地向量索引和上传原文必须位于同一个持久卷，API 只能运行一个 Uvicorn worker。能力边界详见[部署说明](docs/deployment.md)。
 
 ## 核心能力
 
 | 领域 | 已实现能力 |
 | --- | --- |
 | 文档摄取 | TXT、Markdown、HTML、DOCX、PDF；大小、页数、字符数、压缩包膨胀和路径安全边界 |
-| 检索 | 中文 Embedding、Chroma 余弦检索、BM25、RRF 融合、来源多样化、可选 CrossEncoder 重排序 |
+| 检索 | 中文 Embedding、进程内余弦检索、BM25、RRF 融合、来源多样化、可选 CrossEncoder 重排序 |
 | 回答 | 本地 / 混合 / 网络 / 拒答路由；请求级云端与联网授权；原子结论—证据结构化契约 |
 | 研究模式 | 有界查询拆解、多查询检索融合、多次网络补充；无无限 ReAct 循环 |
 | 会话 | TTL、LRU、轮数与字符数上限；租户、知识库和浏览器会话三重隔离 |
@@ -37,7 +37,7 @@ flowchart LR
     P --> Q["SQLite catalog"]
     S --> I["Ingestion\nsecure loaders · adaptive chunks"]
     S --> R["Hybrid retrieval\ndense · BM25 · RRF · rerank"]
-    R --> V["Persistent Chroma"]
+    R --> V["受限本地向量索引"]
     S --> M["Bounded conversation memory"]
     S --> Z["Chat / web providers\nexplicit outbound consent"]
 ```
@@ -116,7 +116,7 @@ python -m uvicorn api_app:app --host 127.0.0.1 --port 8000 --workers 1
 
 如果知识库已经耐久提交为 `READY`，取消请求已经太迟：Catalog 保持 `READY`，job 可能短暂显示 `cancelling`，但已完成的任务最终记为 `succeeded`。Catalog 当前使用 schema v4：上传先进入 `PREPARING`，绑定一次性不可变清单，全部文件落盘核验后才进入 `PENDING`。启动时会事务化迁移 schema v2/v3；升级前仍须停写备份，旧程序不能直接读取迁移后的 v4 Catalog。
 
-`ready` 验证文档存储根、Catalog、向量目录、任务执行器和耐久 job 快照库；它不加载可选模型、不执行 Chroma 查询，也不探测外部供应商。调用方仍需处理单次检索、模型下载或上游服务失败。
+`ready` 验证文档存储根、Catalog、向量目录、任务执行器和耐久 job 快照库；它不加载可选模型、不执行向量查询，也不探测外部供应商。调用方仍需处理单次检索、模型下载或上游服务失败。
 
 正式 Web 工作台位于 `http://127.0.0.1:8000/app`，根路径会自动跳转到该页面。OpenAPI 位于 `http://127.0.0.1:8000/docs`；生产环境可设置 `RAG_API_DOCS_ENABLED=false`。
 
@@ -258,7 +258,7 @@ rag_system/
   idempotency.py      # 持久化幂等 reservation
   file_store.py       # 租户隔离、原子且有界的上传存储
   ingestion.py        # 安全文档加载与确定性切分
-  retrieval.py        # Chroma、混合检索和索引持久化
+  retrieval.py        # 受限本地向量索引、混合检索和索引持久化
   routing.py          # 查询能力意图、证据置信度和可审计路由决策
   benchmark.py        # 检索指标、逐题诊断与延迟分位数
   benchmark_suite.py  # 评测家族、覆盖矩阵、来源隔离和泄漏校验
@@ -292,9 +292,7 @@ tests/                # 单元、隔离、并发、故障与 API 契约测试
 
 威胁模型、残余风险和安全报告流程见[安全设计](docs/security.md)与[安全策略](SECURITY.md)。
 
-> 依赖边界：当前 Chroma 上游尚无针对 `PYSEC-2026-311` 的修复版本。本项目仅支持嵌入式
-> `PersistentClient`，不得运行或暴露 Chroma Server；精确、会到期的风险例外及补偿控制见
-> [依赖与供应链](docs/security.md#依赖与供应链)。
+> 向量存储边界：本项目不再依赖或暴露 ChromaDB。当前后端是带清单校验和原子写入的受限本地 JSON 向量索引，执行精确余弦搜索；它适合受控单进程部署，不是 ANN 或多节点向量服务。
 
 ## 当前非目标
 

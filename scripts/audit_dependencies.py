@@ -131,7 +131,7 @@ def load_policy(
     if payload["schema_version"] != 1:
         raise AuditPolicyError("dependency exception policy schema is unsupported")
     entries = payload["exceptions"]
-    if not isinstance(entries, list) or not 1 <= len(entries) <= _MAX_EXCEPTIONS:
+    if not isinstance(entries, list) or not 0 <= len(entries) <= _MAX_EXCEPTIONS:
         raise AuditPolicyError("dependency exception policy must contain a bounded exception list")
 
     current_date = today or date.today()

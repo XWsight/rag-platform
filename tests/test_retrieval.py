@@ -8,7 +8,7 @@ from pathlib import Path
 from rag_system.config import Settings
 from rag_system.domain import Chunk, IndexRef, Route, SearchHit
 from rag_system.retrieval import (
-    ChromaIndexRepository,
+    LocalVectorIndexRepository,
     FusionWeights,
     HybridRetriever,
     RetrievalProfile,
@@ -239,7 +239,7 @@ class RetrievalTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             settings = replace(Settings(), persist_data=True, storage_root=root).validate()
-            repository = ChromaIndexRepository(settings)
+            repository = LocalVectorIndexRepository(settings)
 
             self.assertTrue(repository.healthcheck())
             vector_directory = root / "vector"

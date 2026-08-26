@@ -58,7 +58,7 @@ class RagPlatform:
     """Coordinate catalog, file storage, jobs, indexes, and answering.
 
     The platform is deployable as one durable node: SQLite, uploaded files,
-    and Chroma collections share one storage volume. Expensive indexing runs
+    and local vector-index files share one storage volume. Expensive indexing runs
     outside the request thread and all resource operations are tenant-scoped.
     """
 

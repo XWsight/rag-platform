@@ -101,7 +101,7 @@ CI 在 Python 3.11/3.12 上执行单元测试、Ruff、分支覆盖率门槛和�
 ```text
 feat: add bounded parser worker
 fix: preserve tenant scope during recovery
-test: cover partial Chroma rebuild
+test: cover partial local-vector-index rebuild
 docs: document routing calibration
 chore: update audited dependency pins
 ```

@@ -14,7 +14,7 @@
 - Web 工作台增强：知识库搜索和移动端切换、资料清单、可移除的上传文件、快捷提问、回答复制、处理状态和外部服务二次确认。
 - Swagger 多文件上传字段的浏览器文件选择器兼容修复和回归测试。
 - 安全的 TXT、Markdown、HTML、DOCX 和 PDF 摄取，以及确定性切分和资源边界。
-- Chroma 向量检索、BM25、RRF 融合、来源多样化和可选 CrossEncoder 重排序。
+- 受限本地向量检索、BM25、RRF 融合、来源多样化和可选 CrossEncoder 重排序。
 - 本地、混合、联网与拒答路由，引用白名单和有预算上限的研究模式。
 - 有界多轮会话记忆，以及租户、知识库和浏览器会话三重隔离。
 - FastAPI 服务、角色授权、请求前认证、限流、持久幂等和后台索引任务。
@@ -31,7 +31,7 @@
 - 检索基准新增统一的路由混淆矩阵与 split、类别、难度、期望路由质量切片；逐题输出不含正文的首名/次名分数、分差、ranker agreement、词法支撑度和置信度，支持在不泄漏问题或文档内容的前提下诊断阈值。
 - 路由置信度改为用真实词法覆盖调节 dense/sparse 一致性奖励，收紧弱本地证据的混合区间；18 题对抗开发集上的 Hybrid 路由由 `0.9444` 提升为 `1.0000`。
 - 云端回答由自由文本引用重构为严格的原子结论—证据 JSON 契约；未知/重复/缺失引用、含混拒答和截断输出整体失败关闭，API 暴露可审计的 claim 映射。结构化调用关闭 Thinking 与随机采样，并只为可修复协议错误提供一次不回显原输出的有界重试。
-- 将 `pypdf` 升级到 `6.15.0`；对唯一无修复的 Chroma 公告 `PYSEC-2026-311` 实行精确例外，并在 `2026-09-01` 关闭式失效。
+- 将 `pypdf` 升级到 `6.15.0`；移除 ChromaDB 及其临时安全例外，改用经过清单、模型标识、维度和有限值校验的本地向量索引。
 - 新增真实检索消融平台：在共享索引上隔离 Dense、BM25、融合、来源多样化和可选重排，以轮转顺序重复执行，输出配置摘要、相对延迟、指标差和逐题新增/修复失败，并拒绝非确定预测或敏感配置字段。
 
 ### Changed
@@ -39,6 +39,7 @@
 - 检索与回答评测套件统一使用共享的严格 JSON、规范化去重、内容摘要和冻结契约基础，避免两套治理逻辑继续分叉。
 - 将查询能力意图从检索器中拆到独立路由层：实时信息、未授权外部动作和受限请求先执行可审计的失败关闭策略，普通知识问题再应用 `0.59` 的证据阈值；216 题全语料 Hybrid 路由基线提升到 `0.9907`。
 - 将检索候选阶段重构为显式 profile，并把归一化 BM25 强度作为默认权重为零的独立融合信号。development/validation 消融没有提供足够证据更换生产权重，因此默认行为保持不变。
+- 稠密索引后端从 ChromaDB 切换为原子写入的进程内精确余弦索引；该后端明确限定为受控单进程、小到中等规模语料，不宣称 ANN 或多节点能力。
 
 - Refactored platform workflows onto explicit repository, document-store, job-executor, index-lifecycle, and knowledge-service ports. Production readiness now composes fail-closed probes for catalog, document, job, and vector storage; the 28-module architecture spine is protected by strict mypy and dependency-direction gates.
 

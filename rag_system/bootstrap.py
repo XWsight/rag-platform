@@ -32,7 +32,7 @@ from rag_system.observability import JsonEventLogger
 from rag_system.platform import RagPlatform
 from rag_system.providers import ZhipuChatModel, ZhipuWebSearch
 from rag_system.rate_limit import TokenBucketRateLimiter
-from rag_system.retrieval import ChromaIndexRepository
+from rag_system.retrieval import LocalVectorIndexRepository
 from rag_system.service import RagService
 from rag_system.tenancy import ApiKeyAuthenticator, Principal, TenantId
 
@@ -156,7 +156,7 @@ class StorageRootLease:
 
 def build_service_from_settings(settings: Settings) -> RagService:
     validated = settings.validate()
-    repository = ChromaIndexRepository(validated)
+    repository = LocalVectorIndexRepository(validated)
     manager = IndexManager(validated, repository)
     chat_model = ZhipuChatModel(validated)
     return RagService(

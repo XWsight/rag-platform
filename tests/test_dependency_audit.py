@@ -20,7 +20,7 @@ class DependencyAuditPolicyTests(unittest.TestCase):
     def _write_fixture(directory: str, *, expires_on: str = "2026-09-01") -> tuple[Path, Path]:
         root = Path(directory)
         requirements = root / "requirements.txt"
-        requirements.write_text("chromadb==1.5.9\npypdf==6.15.0\n", encoding="utf-8")
+        requirements.write_text("exampledb==1.5.9\npypdf==6.15.0\n", encoding="utf-8")
         policy = root / "policy.json"
         policy.write_text(
             json.dumps(
@@ -30,7 +30,7 @@ class DependencyAuditPolicyTests(unittest.TestCase):
                         {
                             "vulnerability_id": "PYSEC-2026-311",
                             "aliases": ["CVE-2026-45829", "GHSA-f4j7-r4q5-qw2c"],
-                            "package": "chromadb",
+                            "package": "exampledb",
                             "pinned_version": "1.5.9",
                             "advisory": "https://github.com/advisories/example",
                             "owner": "XWsight",
@@ -70,7 +70,7 @@ class DependencyAuditPolicyTests(unittest.TestCase):
     def test_policy_requires_the_exact_dependency_pin(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             policy, requirements = self._write_fixture(directory)
-            requirements.write_text("chromadb==1.5.8\n", encoding="utf-8")
+            requirements.write_text("exampledb==1.5.8\n", encoding="utf-8")
             with self.assertRaisesRegex(AuditPolicyError, "exact pin"):
                 load_policy(policy, requirements, today=date(2026, 8, 11))
 
@@ -89,7 +89,7 @@ class DependencyAuditPolicyTests(unittest.TestCase):
             policy, requirements = self._write_fixture(directory)
             exceptions = load_policy(policy, requirements, today=date(2026, 8, 11))
             finding = AuditFinding(
-                package="chromadb",
+                package="exampledb",
                 version="1.5.9",
                 vulnerability_id="PYSEC-2026-311",
                 aliases=("CVE-2026-45829",),
@@ -98,7 +98,7 @@ class DependencyAuditPolicyTests(unittest.TestCase):
             self.assertEqual(evaluate_findings(exceptions, (finding,)), ())
 
             fixed = AuditFinding(
-                package="chromadb",
+                package="exampledb",
                 version="1.5.9",
                 vulnerability_id="PYSEC-2026-311",
                 aliases=(),

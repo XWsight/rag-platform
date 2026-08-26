@@ -17,7 +17,7 @@ from rag_system.config import Settings, load_settings  # noqa: E402
 from rag_system.evaluation import DatasetValidationError  # noqa: E402
 from rag_system.index_manager import IndexManager  # noqa: E402
 from rag_system.quality_gate import evaluate_quality_gate, load_quality_gate  # noqa: E402
-from rag_system.retrieval import ChromaIndexRepository  # noqa: E402
+from rag_system.retrieval import LocalVectorIndexRepository  # noqa: E402
 from rag_system.routing import RoutingPolicy  # noqa: E402
 from rag_system.retrieval_analysis import build_retrieval_suite_report  # noqa: E402
 
@@ -85,7 +85,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
             cases = load_retrieval_benchmark(arguments.dataset)
             documents = tuple(arguments.documents)
-        manager = IndexManager(settings, ChromaIndexRepository(settings))
+        manager = IndexManager(settings, LocalVectorIndexRepository(settings))
         index_ref = manager.build(documents)
         run = run_retrieval_benchmark(
             cases,

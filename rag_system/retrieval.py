@@ -2,19 +2,22 @@
 
 from __future__ import annotations
 
+import json
 import math
+import os
 import stat
 import threading
 import time
-from collections.abc import Callable, Mapping, Sequence
+import tempfile
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import cast
 
 from rag_system.config import Settings
 from rag_system.domain import Chunk, IndexRef, SearchHit
-from rag_system.ports import IndexRepository, Reranker, VectorIndex
+from rag_system.ports import Embedder, IndexRepository, Reranker, VectorIndex
 from rag_system.ranking import reciprocal_rank_fusion
 from rag_system.reranking import RerankerError
 from rag_system.sparse import BM25Index, SparseDocument
@@ -66,54 +69,26 @@ class FusionWeights:
         }
 
 
-class _ChromaDocument(Protocol):
-    metadata: Mapping[str, object]
-
-
-class _ChromaStore(Protocol):
-    def similarity_search_with_score(
-        self,
-        query: str,
-        *,
-        k: int,
-    ) -> Sequence[tuple[_ChromaDocument, float]]: ...
-
-    def add_texts(
-        self,
-        *,
-        texts: Sequence[str],
-        ids: Sequence[str],
-        metadatas: Sequence[Mapping[str, object]],
-    ) -> object: ...
-
-    def delete_collection(self) -> None: ...
-
-    def get(self, *, include: Sequence[str]) -> Mapping[str, object]: ...
-
-
-class _ChromaClient(Protocol):
-    def delete_collection(self, name: str) -> None: ...
-
-
-class ChromaVectorIndex:
-    """A Chroma collection hidden behind framework-neutral domain objects."""
+class LocalVectorIndex:
+    """A bounded in-process cosine index with no network-facing database."""
 
     def __init__(
         self,
         *,
-        store: _ChromaStore,
+        vectors: Mapping[str, tuple[float, ...]],
         index_ref: IndexRef,
         chunks: Sequence[Chunk],
         persistent: bool,
-        inference_lock: threading.RLock,
+        embed_query: Callable[[str], tuple[float, ...]],
+        delete_persisted: Callable[[], bool],
     ) -> None:
-        self._store = store
+        self._vectors = dict(vectors)
         self._index_ref = index_ref
         self._chunks = {chunk.chunk_id: chunk for chunk in chunks}
         self._persistent = persistent
-        self._inference_lock = inference_lock
+        self._embed_query = embed_query
+        self._delete_persisted = delete_persisted
         self._closed = False
-        self._deleted = False
 
     @property
     def index_ref(self) -> IndexRef:
@@ -125,66 +100,61 @@ class ChromaVectorIndex:
         if top_k < 1:
             raise ValueError("top_k must be positive")
 
-        with self._inference_lock:
-            results = self._store.similarity_search_with_score(query, k=top_k)
+        query_vector = self._embed_query(query)
+        ranked: list[tuple[str, float, float]] = []
+        for chunk_id, vector in self._vectors.items():
+            cosine = _cosine_similarity(query_vector, vector)
+            distance = max(0.0, min(2.0, 1.0 - cosine))
+            ranked.append((chunk_id, (cosine + 1.0) / 2.0, distance))
+        ranked.sort(key=lambda item: (-item[1], item[0]))
+
         hits: list[SearchHit] = []
-        for rank, (document, distance_value) in enumerate(results, start=1):
-            chunk_id = str(document.metadata.get("chunk_id", ""))
+        for rank, (chunk_id, score, distance) in enumerate(ranked[:top_k], start=1):
             chunk = self._chunks.get(chunk_id)
-            if chunk is None:
-                continue
-            distance = max(0.0, float(distance_value))
-            cosine_relevance = max(0.0, min(1.0, 1.0 - distance / 2.0))
-            hits.append(
-                SearchHit(
-                    chunk=chunk,
-                    score=cosine_relevance,
-                    dense_rank=rank,
-                    dense_distance=distance,
-                    reasons=("dense",),
+            if chunk is not None:
+                hits.append(
+                    SearchHit(
+                        chunk=chunk,
+                        score=score,
+                        dense_rank=rank,
+                        dense_distance=distance,
+                        reasons=("dense",),
+                    )
                 )
-            )
         return tuple(hits)
 
     def close(self) -> None:
         if self._closed:
             return
         self._closed = True
-        if not self._persistent:
-            self._delete_collection(suppress_errors=True)
+        self._vectors.clear()
 
     def delete(self) -> None:
         """Permanently delete the collection, including persisted data."""
 
-        self._delete_collection(suppress_errors=False)
+        if self._persistent:
+            self._delete_persisted()
+        self._vectors.clear()
         self._closed = True
 
-    def _delete_collection(self, *, suppress_errors: bool) -> None:
-        if self._deleted:
-            return
-        try:
-            self._store.delete_collection()
-        except Exception:
-            if not suppress_errors:
-                raise
-            # Ephemeral cache eviction is best-effort. Durable deletion uses
-            # ``delete()`` above and deliberately propagates failures so the
-            # catalog is not removed while vector data is still present.
-        self._deleted = True
 
+class LocalVectorIndexRepository(IndexRepository):
+    """Persist a bounded local vector index using atomic, validated JSON files.
 
-class ChromaIndexRepository(IndexRepository):
-    """Build or reopen isolated cosine-space Chroma collections."""
+    This adapter intentionally uses exact cosine search.  It is appropriate for
+    the repository's controlled, single-process deployment boundary and avoids
+    exposing a vector database server.  It is not an ANN or multi-node backend.
+    """
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings.validate()
-        self._embedding_function: object | None = None
+        self._embedding_function: Embedder | None = None
         self._lock = threading.RLock()
         self._inference_lock = threading.RLock()
         if self.settings.persist_data:
             self._ensure_persistence_directory()
 
-    def _embeddings(self) -> object:
+    def _embeddings(self) -> Embedder:
         with self._lock:
             if self._embedding_function is None:
                 try:
@@ -193,55 +163,30 @@ class ChromaIndexRepository(IndexRepository):
                     raise DependencyUnavailableError(
                         "缺少 langchain-huggingface，请先安装项目依赖。"
                     ) from error
-                self._embedding_function = HuggingFaceEmbeddings(
-                    model_name=self.settings.embedding_model,
-                    encode_kwargs={"normalize_embeddings": True},
+                self._embedding_function = cast(
+                    Embedder,
+                    HuggingFaceEmbeddings(
+                        model_name=self.settings.embedding_model,
+                        encode_kwargs={"normalize_embeddings": True},
+                    ),
                 )
             return self._embedding_function
 
-    def build(self, index_id: str, chunks: Sequence[Chunk]) -> ChromaVectorIndex:
+    def build(self, index_id: str, chunks: Sequence[Chunk]) -> LocalVectorIndex:
         if not chunks:
             raise ValueError("cannot build an empty index")
-        try:
-            from langchain_chroma import Chroma
-        except ImportError as error:
-            raise DependencyUnavailableError("缺少 langchain-chroma，请先安装项目依赖。") from error
+        expected_ids = tuple(chunk.chunk_id for chunk in chunks)
+        if len(set(expected_ids)) != len(expected_ids):
+            raise IndexIntegrityError("index contains duplicate chunk identifiers")
 
-        collection_name = self._collection_name(index_id)
-        store = self._new_store(Chroma, collection_name)
-        expected_ids = {chunk.chunk_id for chunk in chunks}
-        existing_ids = self._existing_ids(store)
-        if existing_ids and existing_ids != expected_ids:
-            # A partial collection can be left behind by a terminated indexing
-            # job. Its deterministic name makes a clean rebuild safe.
-            try:
-                store.delete_collection()
-            except Exception as error:
-                raise IndexIntegrityError(
-                    "persisted index is inconsistent and could not be rebuilt"
-                ) from error
-            store = self._new_store(Chroma, collection_name)
-            existing_ids = set()
-        if not existing_ids:
-            with self._inference_lock:
-                store.add_texts(
-                    texts=[chunk.text for chunk in chunks],
-                    ids=[chunk.chunk_id for chunk in chunks],
-                    metadatas=[
-                        {
-                            "chunk_id": chunk.chunk_id,
-                            "document_id": chunk.document_id,
-                            "source_name": chunk.source_name,
-                            "chunk_index": chunk.chunk_index,
-                            "start_char": chunk.start_char,
-                            "end_char": chunk.end_char,
-                            "heading": chunk.heading,
-                        }
-                        for chunk in chunks
-                    ],
-                )
-        return ChromaVectorIndex(
-            store=store,
+        vectors = self._load(index_id) if self.settings.persist_data else None
+        if vectors is None or set(vectors) != set(expected_ids):
+            vectors = self._embed_documents(chunks)
+            if self.settings.persist_data:
+                self._write(index_id, expected_ids, vectors)
+        ordered_vectors = {chunk_id: vectors[chunk_id] for chunk_id in expected_ids}
+        return LocalVectorIndex(
+            vectors=ordered_vectors,
             index_ref=IndexRef(
                 index_id=index_id,
                 document_count=len({chunk.document_id for chunk in chunks}),
@@ -250,7 +195,8 @@ class ChromaIndexRepository(IndexRepository):
             ),
             chunks=chunks,
             persistent=self.settings.persist_data,
-            inference_lock=self._inference_lock,
+            embed_query=self._embed_query,
+            delete_persisted=lambda: self._delete(index_id),
         )
 
     def delete(self, index_id: str) -> bool:
@@ -258,17 +204,13 @@ class ChromaIndexRepository(IndexRepository):
 
         if not self.settings.persist_data:
             return False
-        try:
-            import chromadb
-            from chromadb.errors import NotFoundError
-        except ImportError as error:
-            raise DependencyUnavailableError("missing chromadb dependency") from error
+        return self._delete(index_id)
 
-        directory = self._persistence_directory()
-        client = cast(_ChromaClient, chromadb.PersistentClient(path=str(directory)))
+    def _delete(self, index_id: str) -> bool:
+        path = self._index_path(index_id)
         try:
-            client.delete_collection(self._collection_name(index_id))
-        except NotFoundError:
+            path.unlink()
+        except FileNotFoundError:
             return False
         return True
 
@@ -294,20 +236,6 @@ class ChromaIndexRepository(IndexRepository):
             return False
         return True
 
-    def _new_store(
-        self,
-        chroma_factory: Callable[..., Any],
-        collection_name: str,
-    ) -> _ChromaStore:
-        options: dict[str, object] = {
-            "collection_name": collection_name,
-            "embedding_function": self._embeddings(),
-            "collection_metadata": {"hnsw:space": "cosine"},
-        }
-        if self.settings.persist_data:
-            options["persist_directory"] = str(self._persistence_directory())
-        return cast(_ChromaStore, chroma_factory(**options))
-
     def _persistence_directory(self) -> Path:
         return self.settings.storage_root.expanduser().resolve() / "vector"
 
@@ -316,19 +244,119 @@ class ChromaIndexRepository(IndexRepository):
         directory.mkdir(parents=True, exist_ok=True)
         return directory
 
-    @staticmethod
-    def _collection_name(index_id: str) -> str:
-        return f"rag_{index_id.replace('-', '_')}"
+    def _index_path(self, index_id: str) -> Path:
+        if not index_id.startswith("idx_") or not index_id[4:].isalnum():
+            raise ValueError("index identifier is unsafe")
+        return self._persistence_directory() / f"{index_id}.json"
 
-    @staticmethod
-    def _existing_ids(store: _ChromaStore) -> set[str]:
-        result = store.get(include=[])
-        if not isinstance(result, dict):
-            raise IndexIntegrityError("persisted index returned an invalid manifest")
-        ids = result.get("ids", [])
-        if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids):
-            raise IndexIntegrityError("persisted index returned invalid identifiers")
-        return set(ids)
+    def _embed_documents(self, chunks: Sequence[Chunk]) -> dict[str, tuple[float, ...]]:
+        with self._inference_lock:
+            embedded = self._embeddings().embed_documents([chunk.text for chunk in chunks])
+        if len(embedded) != len(chunks):
+            raise IndexIntegrityError("embedding provider returned the wrong vector count")
+        vectors = {
+            chunk.chunk_id: _validated_vector(vector)
+            for chunk, vector in zip(chunks, embedded, strict=True)
+        }
+        _validate_dimensions(vectors.values())
+        return vectors
+
+    def _embed_query(self, query: str) -> tuple[float, ...]:
+        with self._inference_lock:
+            return _validated_vector(self._embeddings().embed_query(query))
+
+    def _load(self, index_id: str) -> dict[str, tuple[float, ...]] | None:
+        path = self._index_path(index_id)
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return None
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise IndexIntegrityError("persisted vector index is unreadable") from error
+        if not isinstance(payload, dict) or set(payload) != {
+            "schema",
+            "embedding_model",
+            "ids",
+            "vectors",
+        }:
+            raise IndexIntegrityError("persisted vector index has an invalid schema")
+        if payload["schema"] != 1 or payload["embedding_model"] != self.settings.embedding_model:
+            return None
+        ids, raw_vectors = payload["ids"], payload["vectors"]
+        if (
+            not isinstance(ids, list)
+            or not all(isinstance(item, str) for item in ids)
+            or len(set(ids)) != len(ids)
+            or not isinstance(raw_vectors, list)
+            or len(ids) != len(raw_vectors)
+        ):
+            raise IndexIntegrityError("persisted vector index has an invalid manifest")
+        vectors = {
+            item: _validated_vector(vector)
+            for item, vector in zip(ids, raw_vectors, strict=True)
+        }
+        _validate_dimensions(vectors.values())
+        return vectors
+
+    def _write(
+        self,
+        index_id: str,
+        ids: Sequence[str],
+        vectors: Mapping[str, tuple[float, ...]],
+    ) -> None:
+        directory = self._ensure_persistence_directory()
+        path = self._index_path(index_id)
+        payload = {
+            "schema": 1,
+            "embedding_model": self.settings.embedding_model,
+            "ids": list(ids),
+            "vectors": [list(vectors[chunk_id]) for chunk_id in ids],
+        }
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{index_id}.", suffix=".tmp", dir=directory
+        )
+        temporary = Path(temporary_name)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
+                os.chmod(temporary, 0o600)
+                json.dump(
+                    payload,
+                    stream,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                    separators=(",", ":"),
+                )
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
+def _validated_vector(value: object) -> tuple[float, ...]:
+    if isinstance(value, (str, bytes)) or not isinstance(value, Sequence) or not value:
+        raise IndexIntegrityError("embedding provider returned an invalid vector")
+    vector = tuple(float(item) for item in value)
+    if not all(math.isfinite(item) for item in vector):
+        raise IndexIntegrityError("embedding provider returned a non-finite vector")
+    return vector
+
+
+def _validate_dimensions(vectors: Iterable[tuple[float, ...]]) -> None:
+    dimensions = {len(vector) for vector in vectors}
+    if not dimensions or len(dimensions) != 1:
+        raise IndexIntegrityError("embedding vectors have inconsistent dimensions")
+
+
+def _cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
+    if len(left) != len(right):
+        raise IndexIntegrityError("query and index embedding dimensions differ")
+    left_norm = math.sqrt(sum(value * value for value in left))
+    right_norm = math.sqrt(sum(value * value for value in right))
+    if left_norm == 0.0 or right_norm == 0.0:
+        return 0.0
+    similarity = sum(a * b for a, b in zip(left, right, strict=True)) / (left_norm * right_norm)
+    return max(-1.0, min(1.0, similarity))
 
 
 class HybridRetriever:

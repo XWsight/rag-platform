@@ -18,7 +18,7 @@ from rag_system.config import Settings, load_settings  # noqa: E402
 from rag_system.evaluation import DatasetValidationError  # noqa: E402
 from rag_system.index_manager import IndexManager  # noqa: E402
 from rag_system.retrieval import (  # noqa: E402
-    ChromaIndexRepository,
+    LocalVectorIndexRepository,
     FusionWeights,
     HybridRetriever,
     RetrievalProfile,
@@ -105,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:
                 "fusion-diverse-rerank requires RAG_RERANKER_MODEL"
             )
 
-        manager = IndexManager(settings, ChromaIndexRepository(settings))
+        manager = IndexManager(settings, LocalVectorIndexRepository(settings))
         ingestion = manager.prepare(documents)
         build_started = time.perf_counter()
         index_ref = manager.build_prepared(ingestion)
