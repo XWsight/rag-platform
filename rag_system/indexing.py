@@ -17,6 +17,13 @@ from rag_system.catalog import (
 from rag_system.file_store import FileStoreError
 from rag_system.job_contracts import CancellationToken, JobCancelledError
 from rag_system.metrics import OperationalMetrics
+from rag_system.provider_errors import (
+    ProviderAuthenticationError,
+    ProviderError,
+    ProviderProtocolError,
+    ProviderRateLimitError,
+    ProviderUnavailableError,
+)
 from rag_system.security import DocumentValidationError
 from rag_system.tenancy import Principal
 
@@ -69,7 +76,11 @@ class KnowledgeBaseIndexer:
                 raise KnowledgeBaseNotReadyError("knowledge base cannot be indexed")
 
             built_index_id = prepared.index_id
-            index_ref = self._service.create_prepared_index(prepared)
+            try:
+                index_ref = self._service.create_prepared_index(prepared)
+            except ProviderError as error:
+                self._record_embedding_provider_failure(error)
+                raise
             token.raise_if_cancelled()
             self._catalog.transition(
                 principal,
@@ -235,6 +246,30 @@ class KnowledgeBaseIndexer:
         self._metrics.index_tasks_total.increment(
             labels={"operation": "build", "outcome": "success"}
         )
+
+    def _record_embedding_provider_failure(self, error: ProviderError) -> None:
+        """Record a bounded, content-free embedding failure when available."""
+
+        error_type = "unknown"
+        if isinstance(error, ProviderAuthenticationError):
+            error_type = "authentication"
+        elif isinstance(error, ProviderProtocolError):
+            error_type = "protocol"
+        elif isinstance(error, ProviderRateLimitError):
+            error_type = "rate_limit"
+        elif isinstance(error, ProviderUnavailableError):
+            error_type = "unavailable"
+        try:
+            self._metrics.external_call_errors_total.increment(
+                labels={
+                    "provider": "embedding",
+                    "operation": "embed",
+                    "error_type": error_type,
+                }
+            )
+        except Exception:
+            # Observability must not change the durable indexing outcome.
+            return
 
 
 __all__ = ["KnowledgeBaseIndexer"]

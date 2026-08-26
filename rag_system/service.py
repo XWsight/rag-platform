@@ -110,12 +110,30 @@ class RagService:
         retrieval_query = self._retrieval_query(request.session_id, question)
         query_plan, planning_error = self._query_plan(question, request)
         retrieval_queries = (retrieval_query, *query_plan[1:])
-        with self.index_manager.lease(index_id) as retriever:
-            hits = self._retrieve_queries(
-                retriever,
-                retrieval_queries,
-                deep_research=request.deep_research,
+        try:
+            with self.index_manager.lease(index_id) as retriever:
+                hits = self._retrieve_queries(
+                    retriever,
+                    retrieval_queries,
+                    deep_research=request.deep_research,
+                )
+        except ProviderError as error:
+            result = self._result(
+                answer="检索服务暂时不可用，请稍后重试。",
+                decision=RouteDecision(Route.ERROR, 0.0, "检索服务调用失败。"),
+                citations=(),
+                hits=(),
+                trace_id=trace_id,
+                started=started,
+                diagnostics={
+                    "embedding_error": type(error).__name__,
+                    "evidence_count": 0,
+                    "history_turns": history_turns,
+                    "planned_query_count": len(query_plan),
+                    "planning_error": planning_error,
+                },
             )
+            return self._remember_result(request, question, result)
         decision = self.routing.decide(
             hits,
             allow_web=request.allow_web,

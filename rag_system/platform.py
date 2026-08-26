@@ -349,6 +349,11 @@ class RagPlatform:
 
         diagnostics = result.diagnostics
         self._record_external_call_failure(
+            diagnostics.get("embedding_error"),
+            provider="embedding",
+            operation="embed",
+        )
+        self._record_external_call_failure(
             diagnostics.get("provider_error"),
             provider="chat",
             operation="generate",

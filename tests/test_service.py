@@ -18,12 +18,15 @@ from rag_system.service import RagService
 
 
 class FakeRetriever:
-    def __init__(self, hits):
+    def __init__(self, hits, *, error=None):
         self.hits = hits
+        self.error = error
         self.queries = []
 
     def search(self, query: str, *, top_k: int):
         self.queries.append(query)
+        if self.error:
+            raise self.error
         return self.hits[:top_k]
 
 
@@ -89,12 +92,12 @@ def make_hit(score: float, reasons=("dense", "sparse")) -> SearchHit:
 
 
 class RagServiceTests(unittest.TestCase):
-    def build_service(self, hit, chat=None, web=None, planner=None):
+    def build_service(self, hit, chat=None, web=None, planner=None, retrieval_error=None):
         chat = chat or FakeChat()
         web = web or FakeWeb()
         service = RagService(
             Settings(),
-            FakeIndexManager(FakeRetriever([hit] if hit else [])),
+            FakeIndexManager(FakeRetriever([hit] if hit else [], error=retrieval_error)),
             chat,
             web,
             query_planner=planner,
@@ -170,6 +173,22 @@ class RagServiceTests(unittest.TestCase):
         self.assertEqual(result.decision.route, Route.ERROR)
         self.assertEqual(len(result.citations), 1)
         self.assertNotIn("offline", result.answer)
+
+    def test_embedding_provider_failure_returns_a_sanitized_result(self) -> None:
+        service, chat, web = self.build_service(
+            make_hit(0.9),
+            retrieval_error=ProviderUnavailableError("embedding details stay private"),
+        )
+
+        result = service.answer("idx", AnswerRequest("问题", "s", True, True))
+
+        self.assertEqual(result.decision.route, Route.ERROR)
+        self.assertEqual(result.diagnostics["embedding_error"], "ProviderUnavailableError")
+        self.assertFalse(result.citations)
+        self.assertEqual(chat.calls, 0)
+        self.assertEqual(web.calls, 0)
+        self.assertNotIn("embedding details", result.answer)
+        self.assertNotIn("embedding details", str(result.diagnostics))
 
     def test_recent_questions_contextualize_retrieval_without_cross_session_leakage(self) -> None:
         service, _, _ = self.build_service(make_hit(0.9))

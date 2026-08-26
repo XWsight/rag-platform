@@ -39,6 +39,7 @@ from rag_system.platform import (
     RagPlatform,
     UploadDocument,
 )
+from rag_system.provider_errors import ProviderUnavailableError
 from rag_system.tenancy import Principal, TenantId
 from rag_system.text import stable_digest
 
@@ -327,6 +328,7 @@ class PlatformTests(unittest.TestCase):
                 answer="safe fallback",
                 decision=RouteDecision(Route.ERROR, 0.4, "provider failed"),
                 diagnostics={
+                    "embedding_error": "ProviderUnavailableError",
                     "provider_error": "ProviderRateLimitError",
                     "planning_error": "ProviderProtocolError",
                     "web_error": "ProviderUnavailableError",
@@ -345,6 +347,10 @@ class PlatformTests(unittest.TestCase):
 
         rendered = self.platform.metrics.registry.render_prometheus()
         self.assertIn(
+            'provider="embedding",operation="embed",error_type="unavailable"} 1',
+            rendered,
+        )
+        self.assertIn(
             'provider="chat",operation="generate",error_type="rate_limit"} 1',
             rendered,
         )
@@ -361,6 +367,31 @@ class PlatformTests(unittest.TestCase):
             rendered,
         )
         self.assertNotIn("provider failed", rendered)
+
+    def test_indexing_records_sanitized_embedding_provider_failure_metrics(self) -> None:
+        original_create = self.service.create_prepared_index
+
+        def unavailable_embedding(*_args, **_kwargs):
+            raise ProviderUnavailableError("embedding provider unavailable")
+
+        self.service.create_prepared_index = unavailable_embedding
+        self.addCleanup(setattr, self.service, "create_prepared_index", original_create)
+        submission = self.platform.create_knowledge_base(
+            self.tenant_a,
+            display_name="Embedding failure",
+            documents=(UploadDocument("guide.txt", b"RAG evidence"),),
+            idempotency_key="embedding-provider-failure",
+        )
+
+        snapshot = self._wait_for_job(submission.job_id.value)
+
+        self.assertEqual(snapshot.status, JobStatus.FAILED)
+        rendered = self.platform.metrics.registry.render_prometheus()
+        self.assertIn(
+            'provider="embedding",operation="embed",error_type="unavailable"} 1',
+            rendered,
+        )
+        self.assertNotIn("embedding provider unavailable", rendered)
 
     def test_cross_tenant_access_is_indistinguishable_from_missing(self) -> None:
         record = self._create_ready()
