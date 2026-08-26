@@ -66,6 +66,7 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = [
   "rag_system.api",
+  "rag_system.api_answer_routes",
   "rag_system.api_error_handlers",
   "rag_system.api_request_context",
   "rag_system.api_resource_routes",

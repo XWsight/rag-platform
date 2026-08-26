@@ -2,12 +2,11 @@
 
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from typing import Annotated
 
-from fastapi import Depends, FastAPI, Request
-from pydantic import Field
+from fastapi import FastAPI
 from starlette.concurrency import run_in_threadpool
 
+from rag_system.api_answer_routes import register_answer_routes
 from rag_system.api_contract import (
     AnswerPayload,
     AnswerResponse,
@@ -20,19 +19,16 @@ from rag_system.api_contract import (
     KnowledgeBaseListResponse,
     KnowledgeBaseResponse,
     KnowledgeBaseSubmissionResponse,
-    answer_response,
 )
 from rag_system.api_error_handlers import install_error_handlers
 from rag_system.api_openapi import install_multipart_openapi_schema
 from rag_system.api_request_context import install_request_context_middleware, outcome_for
 from rag_system.api_resource_routes import register_resource_routes
-from rag_system.api_responses import context_from_request
 from rag_system.api_security import build_api_security_dependencies
 from rag_system.application import RagApplication
-from rag_system.domain import AnswerRequest
 from rag_system.observability import JsonEventLogger
 from rag_system.rate_limit import TokenBucketRateLimiter
-from rag_system.tenancy import ApiKeyAuthenticator, Principal
+from rag_system.tenancy import ApiKeyAuthenticator
 from rag_system.web_ui import mount_web_ui
 
 
@@ -65,9 +61,6 @@ def create_app(
         raise TypeError("shutdown must be callable")
 
     settings = platform.settings.validate()
-
-    class ConfiguredAnswerPayload(AnswerPayload):
-        question: str = Field(min_length=1, max_length=settings.max_question_characters)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -111,35 +104,13 @@ def create_app(
         readiness=readiness,
         error_responses=_error_responses,
     )
-
-    @app.post(
-        "/v1/answers",
-        response_model=AnswerResponse,
-        responses=_error_responses(401, 403, 404, 409, 422, 429, 500, 503),
-        tags=["answers"],
-        summary="Answer from a tenant-owned knowledge base",
+    register_answer_routes(
+        app,
+        platform=platform,
+        settings=settings,
+        security=security,
+        error_responses=_error_responses,
     )
-    def answer(
-        request: Request,
-        principal: Annotated[Principal, Depends(security.reader)],
-        payload: ConfiguredAnswerPayload,
-    ) -> AnswerResponse:
-        request.state.operation = "research" if payload.deep_research else "answer"
-        security.consume(request, principal, tokens=3 if payload.deep_research else 1)
-        result = platform.answer(
-            principal,
-            payload.knowledge_base_id,
-            AnswerRequest(
-                question=payload.question,
-                session_id=payload.session_id,
-                allow_cloud=payload.allow_cloud,
-                allow_web=payload.allow_web,
-                deep_research=payload.deep_research,
-            ),
-        )
-        request.state.metric_route = result.decision.route.value
-        return answer_response(result, trace_id=context_from_request(request).trace_id)
-
     return app
 
 

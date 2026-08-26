@@ -51,6 +51,7 @@ class ArchitectureBoundaryTests(unittest.TestCase):
             for relative in (
                 "rag_system/service.py",
                 "rag_system/api.py",
+                "rag_system/api_answer_routes.py",
                 "rag_system/api_resource_routes.py",
             )
             for imported in _imports(ROOT / relative)
@@ -70,7 +71,11 @@ class ArchitectureBoundaryTests(unittest.TestCase):
             "rag_system.retrieval",
             "rag_system.service",
         }
-        for relative in ("rag_system/api.py", "rag_system/api_resource_routes.py"):
+        for relative in (
+            "rag_system/api.py",
+            "rag_system/api_answer_routes.py",
+            "rag_system/api_resource_routes.py",
+        ):
             with self.subTest(module=relative):
                 imports = set(_imports(ROOT / relative))
                 self.assertEqual(sorted(imports & forbidden), [])
