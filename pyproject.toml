@@ -73,6 +73,7 @@ files = [
   "rag_system/jobs.py",
   "rag_system/job_contracts.py",
   "rag_system/job_store.py",
+  "rag_system/knowledge_base_contracts.py",
   "rag_system/knowledge_base_lifecycle.py",
   "rag_system/loaders.py",
   "rag_system/memory.py",

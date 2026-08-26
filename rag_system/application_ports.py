@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, BinaryIO, Protocol
 
-from rag_system.catalog import (
+from rag_system.knowledge_base_contracts import (
     DocumentManifest,
     KnowledgeBaseErrorCode,
     KnowledgeBaseRecord,

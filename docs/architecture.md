@@ -35,6 +35,7 @@ HTTP 入口不提供 TLS；公网部署必须使用受控反向代理。上传�
 | 边界 | 当前职责 | 不负责 |
 | --- | --- | --- |
 | [`application.py`](../rag_system/application.py) | 向 HTTP、CLI、后台入口和未来 Agent 暴露框架无关的用例端口、提交 DTO 与稳定应用错误 | FastAPI、SQLite、向量后端或供应商实现 |
+| [`knowledge_base_contracts.py`](../rag_system/knowledge_base_contracts.py) | 存储无关的知识库状态、文档清单、记录值对象与状态迁移约束 | SQLite schema、文件布局或 HTTP schema |
 | [`api.py`](../rag_system/api.py)、[`api_contract.py`](../rag_system/api_contract.py)、[`api_errors.py`](../rag_system/api_errors.py) | API Key/Bearer 接入、角色检查、版本化 wire schema、上传读取、租户限流、集中错误分类、安全响应头、健康检查和 `/metrics` | 文档解析、索引算法、业务状态迁移或具体平台实现 |
 | [`tenancy.py`](../rag_system/tenancy.py) | `Principal`、`TenantId`、仅保存摘要的 API Key 校验和非枚举式拒绝 | 密钥签发、在线撤销、组织级 IAM |
 | [`platform.py`](../rag_system/platform.py) | 应用门面：知识库生命周期、幂等创建、任务提交与重启恢复的用例编排 | HTTP 协议、文档内容校验细节、索引状态机和问答执行细节 |
@@ -56,7 +57,7 @@ HTTP 入口不提供 TLS；公网部署必须使用受控反向代理。上传�
 | [`observability.py`](../rag_system/observability.py)、[`metrics.py`](../rag_system/metrics.py) | 字段白名单 JSON 事件、低基数指标和关联 ID | 文档/问题正文日志或分布式追踪后端 |
 | [`bootstrap.py`](../rag_system/bootstrap.py) | 本地 UI 与生产 API 的依赖组装、严格凭据解析、启动恢复 | 运行时迁移编排 |
 
-领域对象和协议集中在 [`domain.py`](../rag_system/domain.py)、[`ports.py`](../rag_system/ports.py) 与 [`application.py`](../rag_system/application.py)。HTTP 只依赖应用端口；具体平台可以在组合根替换。架构测试同时禁止生产模块导入环、HTTP 反向依赖平台/存储实现，以及领域协议引入 Web、数据库或模型框架。
+领域对象和协议集中在 [`domain.py`](../rag_system/domain.py)、[`knowledge_base_contracts.py`](../rag_system/knowledge_base_contracts.py)、[`ports.py`](../rag_system/ports.py) 与 [`application.py`](../rag_system/application.py)。HTTP 只依赖应用端口；具体平台可以在组合根替换。架构测试同时禁止生产模块导入环、HTTP 反向依赖平台/存储实现，以及领域协议引入 Web、数据库或模型框架。
 
 ## 异步建库数据流
 

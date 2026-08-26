@@ -9,7 +9,7 @@ from pathlib import Path, PurePosixPath
 
 from rag_system.application import PlatformIntegrityError, PlatformValidationError, UploadDocument
 from rag_system.application_ports import DocumentStore
-from rag_system.catalog import DocumentManifest, KnowledgeBaseRecord
+from rag_system.knowledge_base_contracts import DocumentManifest, KnowledgeBaseRecord
 from rag_system.tenancy import Principal
 
 

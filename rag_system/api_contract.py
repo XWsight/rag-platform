@@ -6,7 +6,6 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from rag_system.catalog import KnowledgeBaseRecord, KnowledgeBaseStatus
 from rag_system.domain import AnswerClaim, AnswerResult, Citation, Route
 from rag_system.grounding import (
     CITATION_ID_PATTERN,
@@ -16,6 +15,7 @@ from rag_system.grounding import (
     MAX_GROUNDED_ANSWER_CHARACTERS,
 )
 from rag_system.job_contracts import JobSnapshot, JobStatus
+from rag_system.knowledge_base_contracts import KnowledgeBaseRecord, KnowledgeBaseStatus
 
 
 RESOURCE_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"

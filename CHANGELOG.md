@@ -48,6 +48,7 @@
 
 ### Changed
 
+- 知识库状态、文档清单和记录值对象已从 SQLite Catalog 提取为存储无关契约；原 `rag_system.catalog` 导入路径保持兼容，应用工作流不再绑定具体目录实现。
 - 建库、删除、任务绑定、幂等重放和启动恢复已从 `RagPlatform` 收敛到 `KnowledgeBaseLifecycle`；平台现在是稳定应用门面，方便未来替换任务或存储 profile。
 - 问答编排从 `RagPlatform` 抽离到独立的 `KnowledgeBaseAnswerWorkflow`；公开 API 不变，但容量控制、索引懒恢复、会话隔离和观测边界不再与建库生命周期耦合。
 - 创建知识库的幂等重放和崩溃恢复已收敛为单一工作流；已绑定/未绑定预留、被回收的任务和耐久取消意图现在共享同一套“返回可轮询任务或明确处理中”的状态规则。

@@ -6,10 +6,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import BinaryIO, Protocol
 
-from rag_system.catalog import KnowledgeBaseRecord
 from rag_system.config import Settings
 from rag_system.domain import AnswerRequest, AnswerResult
 from rag_system.job_contracts import JobId, JobSnapshot
+from rag_system.knowledge_base_contracts import KnowledgeBaseRecord
 from rag_system.metrics import OperationalMetrics
 from rag_system.tenancy import Principal
 

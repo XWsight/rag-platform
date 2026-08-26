@@ -22,6 +22,7 @@ FRAMEWORK_NEUTRAL_MODULES = (
     "rag_system/indexing.py",
     "rag_system/health.py",
     "rag_system/job_contracts.py",
+    "rag_system/knowledge_base_contracts.py",
     "rag_system/knowledge_base_lifecycle.py",
     "rag_system/retrieval_experiments.py",
 )
@@ -78,6 +79,23 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         ):
             with self.subTest(module=relative):
                 self._assert_runtime_port_boundary(relative)
+
+    def test_application_contracts_and_workflows_do_not_depend_on_catalog_adapter(self) -> None:
+        modules = (
+            "rag_system/application.py",
+            "rag_system/application_ports.py",
+            "rag_system/answer_workflow.py",
+            "rag_system/assets.py",
+            "rag_system/indexing.py",
+            "rag_system/knowledge_base_lifecycle.py",
+            "rag_system/platform.py",
+        )
+        violations = [
+            relative
+            for relative in modules
+            if "rag_system.catalog" in _imports(ROOT / relative)
+        ]
+        self.assertEqual(violations, [])
 
     def _assert_runtime_port_boundary(self, relative: str) -> None:
         forbidden = {

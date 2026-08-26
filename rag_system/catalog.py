@@ -3,39 +3,39 @@
 from __future__ import annotations
 
 import json
-import math
-import re
 import secrets
 import sqlite3
 import time
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
-from enum import StrEnum
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from threading import RLock
 from typing import Any, cast
 
 from .tenancy import Principal, TenantId
+from rag_system.knowledge_base_contracts import (
+    ALLOWED_STATUS_TRANSITIONS,
+    DocumentManifest,
+    DocumentManifestEntry,
+    KnowledgeBaseContractError as CatalogError,
+    KnowledgeBaseErrorCode,
+    KnowledgeBaseRecord,
+    KnowledgeBaseStatus,
+    KnowledgeBaseValidationError as CatalogValidationError,
+    MAX_DOCUMENT_MANIFEST_ITEMS,
+    is_valid_timestamp,
+    normalize_manifest,
+    validate_display_name,
+    validate_idempotency_reservation_id,
+    validate_internal_index_id,
+    validate_resource_id,
+)
 
 
 _SCHEMA_VERSION = 4
 _MAX_LIST_LIMIT = 100
 _MAX_LIST_OFFSET = 10_000
-_MAX_MANIFEST_ITEMS = 10_000
 _MAX_MANIFEST_JSON_BYTES = 8 * 1024 * 1024
-_RESOURCE_ID_PATTERN = re.compile(r"kb_[A-Za-z0-9_-]{32}")
-_INDEX_ID_PATTERN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9._:-]{0,190}[A-Za-z0-9])?")
-_SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
-_IDEMPOTENCY_RESERVATION_PATTERN = re.compile(r"idem_[0-9a-f]{32}")
-
-
-class CatalogError(Exception):
-    """Base class for catalog failures safe to classify at an API boundary."""
-
-
-class CatalogValidationError(CatalogError, ValueError):
-    """Catalog input failed strict validation."""
 
 
 class CatalogSchemaError(CatalogError):
@@ -62,166 +62,6 @@ class KnowledgeBaseUnavailableError(CatalogError):
 class InvalidStatusTransitionError(CatalogError):
     def __init__(self, current: KnowledgeBaseStatus, target: KnowledgeBaseStatus) -> None:
         super().__init__(f"Invalid knowledge base status transition: {current.value} -> {target.value}.")
-
-
-class KnowledgeBaseStatus(StrEnum):
-    PREPARING = "preparing"
-    PENDING = "pending"
-    INDEXING = "indexing"
-    CANCELLING = "cancelling"
-    READY = "ready"
-    FAILED = "failed"
-    DELETING = "deleting"
-
-
-class KnowledgeBaseErrorCode(StrEnum):
-    CONTENT_REJECTED = "content_rejected"
-    INGESTION_FAILED = "ingestion_failed"
-    INDEX_BUILD_FAILED = "index_build_failed"
-    INDEX_STORAGE_FAILED = "index_storage_failed"
-    UPSTREAM_UNAVAILABLE = "upstream_unavailable"
-    INTERNAL_ERROR = "internal_error"
-    INDEX_CANCELLED = "index_cancelled"
-
-
-_ALLOWED_TRANSITIONS: Mapping[KnowledgeBaseStatus, frozenset[KnowledgeBaseStatus]] = {
-    KnowledgeBaseStatus.PREPARING: frozenset(
-        {
-            KnowledgeBaseStatus.PENDING,
-            KnowledgeBaseStatus.FAILED,
-            KnowledgeBaseStatus.DELETING,
-        }
-    ),
-    KnowledgeBaseStatus.PENDING: frozenset(
-        {
-            KnowledgeBaseStatus.INDEXING,
-            KnowledgeBaseStatus.CANCELLING,
-            KnowledgeBaseStatus.FAILED,
-            KnowledgeBaseStatus.DELETING,
-        }
-    ),
-    KnowledgeBaseStatus.INDEXING: frozenset(
-        {
-            KnowledgeBaseStatus.READY,
-            KnowledgeBaseStatus.CANCELLING,
-            KnowledgeBaseStatus.FAILED,
-            KnowledgeBaseStatus.DELETING,
-        }
-    ),
-    KnowledgeBaseStatus.READY: frozenset(
-        {KnowledgeBaseStatus.INDEXING, KnowledgeBaseStatus.DELETING}
-    ),
-    KnowledgeBaseStatus.CANCELLING: frozenset(
-        {KnowledgeBaseStatus.FAILED, KnowledgeBaseStatus.DELETING}
-    ),
-    KnowledgeBaseStatus.FAILED: frozenset(
-        {KnowledgeBaseStatus.INDEXING, KnowledgeBaseStatus.DELETING}
-    ),
-    KnowledgeBaseStatus.DELETING: frozenset(),
-}
-
-
-@dataclass(frozen=True, slots=True)
-class DocumentManifest:
-    display_name: str
-    relative_path: str
-    size_bytes: int
-    sha256: str
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "display_name", _validate_display_name(self.display_name, 255))
-        object.__setattr__(self, "relative_path", _validate_relative_path(self.relative_path))
-        if isinstance(self.size_bytes, bool) or not isinstance(self.size_bytes, int):
-            raise CatalogValidationError("Document size must be an integer.")
-        if not 0 <= self.size_bytes <= 2**63 - 1:
-            raise CatalogValidationError("Document size is outside the supported range.")
-        if not isinstance(self.sha256, str) or _SHA256_PATTERN.fullmatch(self.sha256) is None:
-            raise CatalogValidationError("Document SHA-256 must be 64 lowercase hexadecimal characters.")
-
-
-DocumentManifestEntry = DocumentManifest
-
-
-@dataclass(frozen=True, slots=True)
-class KnowledgeBaseRecord:
-    resource_id: str
-    tenant_id: TenantId
-    display_name: str
-    status: KnowledgeBaseStatus
-    internal_index_id: str | None
-    documents: tuple[DocumentManifest, ...]
-    document_count: int
-    total_bytes: int
-    chunk_count: int
-    error_code: KnowledgeBaseErrorCode | None
-    created_at: float
-    updated_at: float
-    version: int
-    idempotency_reservation_id: str | None = None
-
-    def __post_init__(self) -> None:
-        _validate_resource_id(self.resource_id)
-        if not isinstance(self.tenant_id, TenantId):
-            raise CatalogValidationError("tenant_id must be a TenantId.")
-        object.__setattr__(self, "display_name", _validate_display_name(self.display_name, 200))
-        if not isinstance(self.status, KnowledgeBaseStatus):
-            raise CatalogValidationError("Invalid knowledge base status.")
-        if self.internal_index_id is not None:
-            object.__setattr__(
-                self,
-                "internal_index_id",
-                _validate_internal_index_id(self.internal_index_id),
-            )
-        object.__setattr__(self, "documents", _normalize_manifest(self.documents))
-        expected_total = sum(item.size_bytes for item in self.documents)
-        if self.document_count != len(self.documents) or self.total_bytes != expected_total:
-            raise CatalogValidationError("Stored document counts do not match the manifest.")
-        if isinstance(self.chunk_count, bool) or not isinstance(self.chunk_count, int) or self.chunk_count < 0:
-            raise CatalogValidationError("chunk_count must be a non-negative integer.")
-        if self.status in {
-            KnowledgeBaseStatus.PENDING,
-            KnowledgeBaseStatus.INDEXING,
-            KnowledgeBaseStatus.CANCELLING,
-            KnowledgeBaseStatus.READY,
-        } and not self.documents:
-            raise CatalogValidationError(
-                "An active knowledge base requires an attached document manifest."
-            )
-        if self.status in {
-            KnowledgeBaseStatus.PREPARING,
-            KnowledgeBaseStatus.PENDING,
-        } and (self.internal_index_id is not None or self.chunk_count != 0):
-            raise CatalogValidationError(
-                "Preparing and pending knowledge bases cannot contain index results."
-            )
-        if (
-            self.status is KnowledgeBaseStatus.INDEXING
-            and self.internal_index_id is None
-        ):
-            raise CatalogValidationError(
-                "An indexing knowledge base requires an internal index ID."
-            )
-        if self.status is KnowledgeBaseStatus.READY and self.internal_index_id is None:
-            raise CatalogValidationError("A ready knowledge base requires an internal index ID.")
-        if self.status is KnowledgeBaseStatus.FAILED:
-            if not isinstance(self.error_code, KnowledgeBaseErrorCode):
-                raise CatalogValidationError("A failed knowledge base requires a safe error code.")
-        elif self.error_code is not None:
-            raise CatalogValidationError("Only failed knowledge bases may contain an error code.")
-        if not _valid_timestamp(self.created_at) or not _valid_timestamp(self.updated_at):
-            raise CatalogValidationError("Catalog timestamps must be finite and non-negative.")
-        if self.updated_at < self.created_at:
-            raise CatalogValidationError("updated_at cannot precede created_at.")
-        if isinstance(self.version, bool) or not isinstance(self.version, int) or self.version < 1:
-            raise CatalogValidationError("version must be a positive integer.")
-        if self.idempotency_reservation_id is not None:
-            object.__setattr__(
-                self,
-                "idempotency_reservation_id",
-                _validate_idempotency_reservation_id(
-                    self.idempotency_reservation_id
-                ),
-            )
 
 
 class KnowledgeBaseCatalog:
@@ -265,11 +105,11 @@ class KnowledgeBaseCatalog:
         idempotency_reservation_id: str | None = None,
     ) -> KnowledgeBaseRecord:
         tenant_id = _principal_tenant(principal)
-        clean_name = _validate_display_name(display_name, 200)
+        clean_name = validate_display_name(display_name, 200)
         manifest_json = _encode_manifest(())
         created_at = self._now()
         reservation_id = (
-            _validate_idempotency_reservation_id(idempotency_reservation_id)
+            validate_idempotency_reservation_id(idempotency_reservation_id)
             if idempotency_reservation_id is not None
             else None
         )
@@ -329,7 +169,7 @@ class KnowledgeBaseCatalog:
         """Find the tenant-owned resource for crash recovery, if it exists."""
 
         tenant_id = _principal_tenant(principal)
-        clean_reservation_id = _validate_idempotency_reservation_id(reservation_id)
+        clean_reservation_id = validate_idempotency_reservation_id(reservation_id)
         with self._read_connection() as connection:
             row = connection.execute(
                 """
@@ -377,7 +217,7 @@ class KnowledgeBaseCatalog:
         tenant_id = _principal_tenant(principal)
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= _MAX_LIST_LIMIT:
             raise CatalogValidationError(f"limit must be between 1 and {_MAX_LIST_LIMIT}.")
-        if not _valid_timestamp(updated_at):
+        if not is_valid_timestamp(updated_at):
             raise CatalogValidationError("cursor timestamp is invalid.")
         clean_resource_id = _safe_resource_lookup_id(resource_id)
         with self._read_connection() as connection:
@@ -401,7 +241,7 @@ class KnowledgeBaseCatalog:
     ) -> KnowledgeBaseRecord:
         tenant_id = _principal_tenant(principal)
         clean_id = _safe_resource_lookup_id(resource_id)
-        manifest = _normalize_manifest(documents)
+        manifest = normalize_manifest(documents)
         if not manifest:
             raise CatalogValidationError("Document manifest cannot be empty.")
         manifest_json = _encode_manifest(manifest)
@@ -453,7 +293,7 @@ class KnowledgeBaseCatalog:
 
         with self._write_lock, self._write_transaction() as connection:
             current = self._owned_record(connection, tenant_id, clean_id)
-            if target not in _ALLOWED_TRANSITIONS[current.status]:
+            if target not in ALLOWED_STATUS_TRANSITIONS[current.status]:
                 raise InvalidStatusTransitionError(current.status, target)
 
             new_index_id = current.internal_index_id
@@ -476,7 +316,7 @@ class KnowledgeBaseCatalog:
                     raise CatalogValidationError(
                         "Indexing requires internal_index_id and rejects chunk_count/error_code."
                     )
-                new_index_id = _validate_internal_index_id(internal_index_id)
+                new_index_id = validate_internal_index_id(internal_index_id)
                 new_chunk_count = 0
             elif target is KnowledgeBaseStatus.READY:
                 if internal_index_id is not None or error_code is not None:
@@ -642,7 +482,7 @@ class KnowledgeBaseCatalog:
 
     def _now(self) -> float:
         value = float(self._clock())
-        if not _valid_timestamp(value):
+        if not is_valid_timestamp(value):
             raise CatalogValidationError("clock returned an invalid timestamp.")
         return value
 
@@ -763,83 +603,15 @@ def _principal_tenant(principal: Principal) -> TenantId:
 
 def _new_resource_id() -> str:
     value = f"kb_{secrets.token_hex(16)}"
-    _validate_resource_id(value)
-    return value
-
-
-def _validate_resource_id(value: object) -> str:
-    if not isinstance(value, str) or _RESOURCE_ID_PATTERN.fullmatch(value) is None:
-        raise CatalogValidationError("Invalid knowledge base resource ID.")
+    validate_resource_id(value)
     return value
 
 
 def _safe_resource_lookup_id(value: object) -> str:
     try:
-        return _validate_resource_id(value)
+        return validate_resource_id(value)
     except CatalogValidationError:
         raise KnowledgeBaseUnavailableError() from None
-
-
-def _validate_display_name(value: object, max_length: int) -> str:
-    if not isinstance(value, str):
-        raise CatalogValidationError("Display name must be text.")
-    normalized = value.strip()
-    if not normalized or len(normalized) > max_length:
-        raise CatalogValidationError("Display name has an invalid length.")
-    if any(ord(character) < 32 for character in normalized) or any(
-        character in '/\\<>:"|?*' for character in normalized
-    ):
-        raise CatalogValidationError("Display name contains unsafe characters.")
-    if normalized.endswith((".", " ")):
-        raise CatalogValidationError("Display name has an unsafe ending.")
-    return normalized
-
-
-def _validate_relative_path(value: object) -> str:
-    if not isinstance(value, str) or not value or len(value) > 1024:
-        raise CatalogValidationError("Manifest path has an invalid length.")
-    if "\\" in value or "\x00" in value or value.startswith("/"):
-        raise CatalogValidationError("Manifest path must be a safe POSIX relative path.")
-    path = PurePosixPath(value)
-    if path.is_absolute() or str(path) != value or not path.parts:
-        raise CatalogValidationError("Manifest path must be normalized and relative.")
-    for part in path.parts:
-        if part in {"", ".", ".."} or part.endswith((".", " ")):
-            raise CatalogValidationError("Manifest path contains an unsafe segment.")
-        if any(ord(character) < 32 for character in part) or any(
-            character in '<>:"|?*' for character in part
-        ):
-            raise CatalogValidationError("Manifest path contains unsafe characters.")
-    return value
-
-
-def _validate_internal_index_id(value: object) -> str:
-    if not isinstance(value, str) or _INDEX_ID_PATTERN.fullmatch(value) is None:
-        raise CatalogValidationError("Internal index ID has an invalid format.")
-    return value
-
-
-def _validate_idempotency_reservation_id(value: object) -> str:
-    if (
-        not isinstance(value, str)
-        or _IDEMPOTENCY_RESERVATION_PATTERN.fullmatch(value) is None
-    ):
-        raise CatalogValidationError("Idempotency reservation ID has an invalid format.")
-    return value
-
-
-def _normalize_manifest(documents: Sequence[DocumentManifest]) -> tuple[DocumentManifest, ...]:
-    if isinstance(documents, (str, bytes)) or not isinstance(documents, Sequence):
-        raise CatalogValidationError("documents must be a sequence of DocumentManifest values.")
-    if len(documents) > _MAX_MANIFEST_ITEMS:
-        raise CatalogValidationError("Document manifest exceeds the item limit.")
-    normalized = tuple(documents)
-    if any(not isinstance(item, DocumentManifest) for item in normalized):
-        raise CatalogValidationError("Document manifest contains an invalid item.")
-    paths = [item.relative_path for item in normalized]
-    if len(paths) != len(set(paths)):
-        raise CatalogValidationError("Document manifest contains duplicate relative paths.")
-    return normalized
 
 
 def _encode_manifest(documents: tuple[DocumentManifest, ...]) -> str:
@@ -867,7 +639,7 @@ def _decode_manifest(value: object) -> tuple[DocumentManifest, ...]:
             object_pairs_hook=_strict_json_object,
             parse_constant=lambda _constant: (_ for _ in ()).throw(ValueError()),
         )
-        if not isinstance(payload, list) or len(payload) > _MAX_MANIFEST_ITEMS:
+        if not isinstance(payload, list) or len(payload) > MAX_DOCUMENT_MANIFEST_ITEMS:
             raise ValueError
         documents: list[DocumentManifest] = []
         required_keys = {"display_name", "relative_path", "size_bytes", "sha256"}
@@ -882,7 +654,7 @@ def _decode_manifest(value: object) -> tuple[DocumentManifest, ...]:
                     sha256=item["sha256"],
                 )
             )
-        return _normalize_manifest(documents)
+        return normalize_manifest(documents)
     except (CatalogError, TypeError, ValueError, json.JSONDecodeError) as exc:
         raise CatalogSchemaError() from exc
 
@@ -920,15 +692,6 @@ def _record_from_row(row: sqlite3.Row) -> KnowledgeBaseRecord:
         raise
     except (CatalogError, KeyError, TypeError, ValueError) as exc:
         raise CatalogSchemaError() from exc
-
-
-def _valid_timestamp(value: object) -> bool:
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(float(value))
-        and float(value) >= 0
-    )
 
 
 __all__ = [

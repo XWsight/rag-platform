@@ -14,11 +14,11 @@ from rag_system.application import (
 )
 from rag_system.application_ports import KnowledgeBaseRepository, KnowledgeService
 from rag_system.assets import KnowledgeBaseAssets
-from rag_system.catalog import KnowledgeBaseStatus
 from rag_system.config import Settings
 from rag_system.coordination import ResourceLockPool
 from rag_system.domain import AnswerRequest, AnswerResult
 from rag_system.metrics import OperationalMetrics
+from rag_system.knowledge_base_contracts import KnowledgeBaseStatus
 from rag_system.tenancy import Principal
 
 

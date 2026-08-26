@@ -21,7 +21,7 @@ from rag_system.application_ports import (
     KnowledgeService,
 )
 from rag_system.assets import AssetStoreFailure, KnowledgeBaseAssets
-from rag_system.catalog import (
+from rag_system.knowledge_base_contracts import (
     KnowledgeBaseErrorCode,
     KnowledgeBaseRecord,
     KnowledgeBaseStatus,
