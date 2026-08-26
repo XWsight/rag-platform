@@ -201,7 +201,7 @@ Catalog 以 SQLite `user_version=4` 标识当前 schema。全新空存储会直�
 | --- | --- | --- |
 | 原始文档、目录记录、幂等记录、本地向量索引 | 是 | 从卷读取；索引缓存缺失时按清单校验文档并重开/重建 |
 | `PREPARING` 知识库状态 | 是 | 完整文件集核验通过则晋升并建库；部分文件集精确回滚，失败时保留 `DELETING` |
-| `PENDING`/`INDEXING` 知识库状态 | 是 | 启动时按配置中已知租户重新提交任务 |
+| `PENDING`/`INDEXING` 知识库状态 | 是 | 启动时按配置中已知租户以稳定 keyset 分页扫描并重新提交任务 |
 | `CANCELLING` 知识库状态 | 是 | 不重新提交索引；启动时收敛为 `FAILED`，错误码为 `index_cancelled` |
 | job 状态、ID 与有界结果快照 | 是 | 活动快照安全转为 `FAILED`/`worker_restarted`；保留期内旧 ID 仍可查询 |
 | 任务线程、Python callable 和 resource-job 内存映射 | 否 | 不恢复旧执行；按 Catalog 状态重建当前进程的任务与资源绑定 |
