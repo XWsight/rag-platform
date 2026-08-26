@@ -57,6 +57,8 @@ class SecurityBoundaryTests(unittest.TestCase):
         )
         self.assertEqual(safe_external_url("file:///etc/passwd"), "")
         self.assertEqual(safe_external_url("https://user:pass@example.com"), "")
+        self.assertEqual(safe_external_url("https://example.com:bad/source"), "")
+        self.assertEqual(safe_external_url("https://example.com:99999/source"), "")
 
     def test_markdown_and_secret_sanitizers(self) -> None:
         self.assertEqual(markdown_text("<script>x</script>"), "&lt;script&gt;x&lt;/script&gt;")

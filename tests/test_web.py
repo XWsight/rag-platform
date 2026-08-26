@@ -16,6 +16,23 @@ class WebResultQualityTests(unittest.TestCase):
         )
         self.assertEqual(canonicalize_url("file:///tmp/a"), "")
 
+    def test_invalid_result_port_is_rejected_without_interrupting_ranking(self) -> None:
+        ranked = rank_web_results(
+            "混合检索",
+            [
+                result(
+                    "invalid-port",
+                    "混合检索",
+                    "仍可作为无链接摘要使用的资料。",
+                    "https://example.com:bad/source",
+                )
+            ],
+        )
+
+        self.assertEqual(len(ranked), 1)
+        self.assertEqual(ranked[0].result.url, "")
+        self.assertEqual(ranked[0].domain, "unknown")
+
     def test_duplicate_urls_and_duplicate_content_are_removed(self) -> None:
         ranked = rank_web_results(
             "混合检索",
