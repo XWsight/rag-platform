@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全问题私密报告
+    url: https://github.com/XWsight/rag-system/blob/main/SECURITY.md
+    about: 请勿在公开 Issue 中披露可利用的安全细节。
+  - name: 贡献指南
+    url: https://github.com/XWsight/rag-system/blob/main/CONTRIBUTING.md
+    about: 开始贡献前请阅读开发、测试和评测要求。

@@ -1,0 +1,43 @@
+name: 缺陷报告
+description: 提交可复现、已脱敏的功能或可靠性问题。
+title: "bug: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请不要提交 API Key、客户文档、问题正文、模型原始响应或可利用的安全细节。安全问题请遵循 SECURITY.md 的私密渠道。
+  - type: textarea
+    id: summary
+    attributes:
+      label: 问题摘要
+      description: 简要说明实际结果与预期结果。
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 最小复现步骤
+      description: 提供不含敏感数据、可重复执行的步骤或最小代码。
+      placeholder: |
+        1. 使用临时目录和 fake provider 启动
+        2. 调用 …
+        3. 观察到 …
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境与日志摘要
+      description: Python、操作系统、提交版本，以及脱敏后的错误类型/堆栈。
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已确认这不是安全漏洞披露，也未包含密钥或私有数据。
+          required: true
+        - label: 我已搜索现有 Issue，并阅读 CONTRIBUTING.md。
+          required: true

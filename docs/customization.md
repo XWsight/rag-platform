@@ -44,6 +44,8 @@ RAG Studio 是可派生的通用知识检索基座，而不是某个行业的固
 自定义工厂只负责装配经过验证的适配器。回答协议、claim/citation 复核、请求级
 `allow_cloud` / `allow_web` 授权和错误脱敏仍由基座执行，不能在适配器中绕过。
 实现前请遵循[提供商适配器一致性](provider-conformance.md)中的启动期契约和离线测试清单。
+整套基础设施替换还必须遵循 [Runtime Profile 一致性验证](runtime-profile-conformance.md)，并在临时存储中
+完成组件、就绪与释放预检。
 
 ## 不可破坏的基座约束
 

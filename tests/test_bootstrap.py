@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from rag_system.bootstrap import (
+    LocalDurableRuntimeProfile,
     StorageRootLease,
     build_production_runtime,
     build_service_from_settings,
@@ -166,6 +167,14 @@ class BootstrapTests(unittest.TestCase):
             second = StorageRootLease.acquire(root)
             second.close()
 
+    def test_storage_root_lease_rejects_a_non_file_lease_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".rag-studio.instance").mkdir()
+
+            with self.assertRaisesRegex(RuntimeError, "lease path is unsafe"):
+                StorageRootLease.acquire(root)
+
     def test_service_bootstrap_accepts_an_explicit_provider_factory(self) -> None:
         factory = _TestProviderFactory()
 
@@ -175,6 +184,23 @@ class BootstrapTests(unittest.TestCase):
         self.assertIs(service.chat_model, factory.chat_model)
         self.assertIs(service.web_search, factory.web_search)
         self.assertIs(service.query_planner, factory.chat_model)
+
+    def test_default_profile_cleans_a_service_when_durable_job_recovery_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            settings = replace(Settings(), storage_root=Path(directory))
+            service = _RuntimeService()
+            with (
+                patch("rag_system.bootstrap.build_service_from_settings", return_value=service),
+                patch(
+                    "rag_system.bootstrap.SqliteJobSnapshotStore.recover_interrupted",
+                    side_effect=RuntimeError("durable job recovery failure"),
+                ),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "durable job recovery failure"):
+                    LocalDurableRuntimeProfile().build_components(settings)
+
+            self.assertEqual(service.index_manager.close_calls, 1)
+            self.assertEqual(service.close_calls, 1)
 
     def test_production_runtime_accepts_a_replaceable_profile(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

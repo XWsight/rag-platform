@@ -62,3 +62,18 @@ python3 scripts/benchmark_local_index.py \
 3. 任何候选后端必须保持现有索引 ID、租户边界、持久化校验和显式删除语义；
    同时在冻结 retrieval suite 上不得降低 Recall@k、MRR@k、nDCG@k 或关键安全
    路由切片。
+
+## 可执行的容量判定记录
+
+将同一目标 chunk 数的微基准 JSON 交给下面的工具，并显式提供本次部署批准的检索 P95 预算：
+
+```bash
+python scripts/assess_local_index_capacity.py reports/local-index.json \
+  --target-chunks 5000 \
+  --p95-budget-ms 100 \
+  --json-output reports/local-index-capacity.json
+```
+
+结果只能是三种保守建议：补测目标规模、保留 local exact 作为候选，或评估 ANN 候选。它不会自动修改
+运行时，也不把合成、顺序微基准误报为端到端 SLA。做出外置基础设施决定前，仍须记录真实语料、预热
+Embedding、并发、端到端 P95、检索质量、迁移/回滚和故障恢复证据。

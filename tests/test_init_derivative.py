@@ -42,6 +42,12 @@ class InitDerivativeTests(unittest.TestCase):
             self.assertEqual(governance["status"], "draft")
             self.assertEqual(governance["product_name"], "Legal Assistant")
             self.assertNotIn("{{", json.dumps(governance))
+            workflow = (
+                created / ".github" / "workflows" / "derivative-evaluation.yml"
+            ).read_text(encoding="utf-8")
+            self.assertIn("--require-ready", workflow)
+            self.assertIn("legal_assistant/evals/governance.json", workflow)
+            self.assertNotIn("{{", workflow)
 
     def test_accepts_an_explicit_base_revision_for_a_reproducible_baseline(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

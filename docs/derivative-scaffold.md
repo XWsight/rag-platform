@@ -56,3 +56,7 @@ python scripts\validate_derivative_evaluation.py legal_assistant\evals\governanc
 
 脚手架本身不是新的部署模式：派生项目仍默认使用 durable single-node 约束。达到规模边界后，
 应按基座部署文档把状态逐项外置，而不是通过复制单机容器获得多副本能力。
+
+脚手架还会生成一个仅手动触发的 `derivative-evaluation` GitHub workflow。它在领域评测治理记录标为
+`ready` 后，用 `--require-ready` 校验冻结 suite 与未消费 test split；草稿阶段不应伪造数据或把该
+workflow 设为必过检查。

@@ -26,6 +26,8 @@ deployment files, then add domain-specific code here.
    contracts exist.
 7. Run `python -m unittest {{PACKAGE_NAME}}.tests.test_provider_factory` and the base
    `scripts/check.ps1` before every integration.
+8. After governance is genuinely `ready`, manually run the generated `derivative-evaluation`
+   GitHub workflow to require frozen suites and an unconsumed held-out test split.
 
 The base contracts described in `docs/customization.md` and `docs/provider-conformance.md` remain
 mandatory. This layer must not bypass claim/citation validation, tenant isolation, or request-level
