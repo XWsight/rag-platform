@@ -102,6 +102,17 @@ python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
+浏览器端关键流程使用 Playwright 对真实 HTTP API 运行回归，而不是在测试中替换
+`fetch`。首次准备一次浏览器运行时后即可执行：
+
+```powershell
+npm ci
+npx playwright install chromium
+npm run test:browser
+```
+
+它覆盖访问密钥连接、文档上传和索引完成、问答与引用、资料详情、会话清空、删除，以及云端授权默认关闭与显式确认。`scripts/check.ps1` 也会运行该套件。
+
 如果需要云端生成或联网搜索，再在 `.env` 中配置：
 
 ```dotenv

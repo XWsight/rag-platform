@@ -68,6 +68,10 @@ try {
         --markdown-output reports/bm25-foundation.md
     Invoke-CheckedPython -m coverage run -m unittest discover -s tests -v
     Invoke-CheckedPython -m coverage report
+    & npm run test:browser
+    if ($LASTEXITCODE -ne 0) {
+        throw "Browser end-to-end test command failed with exit code ${LASTEXITCODE}."
+    }
     Invoke-CheckedGit diff --check
 }
 finally {
