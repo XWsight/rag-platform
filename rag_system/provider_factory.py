@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
-from rag_system.config import Settings
+from rag_system.config import SecretValue, Settings
 from rag_system.ports import ChatModel, QueryPlanner, WebSearchProvider
 
 
@@ -57,4 +57,47 @@ def create_provider_bundle(factory: ProviderFactory, settings: Settings) -> Prov
     return providers
 
 
-__all__ = ["ProviderBundle", "ProviderFactory", "create_provider_bundle"]
+def verify_offline_provider_factory(factory: ProviderFactory) -> None:
+    """Exercise a factory's safe no-credential startup contract.
+
+    This intentionally does not call provider operations: adapter-specific
+    transport, error-redaction, and answer-protocol tests remain the
+    derivative's responsibility.  It does ensure that a factory can assemble
+    without credentials, reports strict boolean availability, and releases
+    optional client resources idempotently.
+    """
+
+    settings = Settings(api_key=SecretValue("")).validate()
+    providers = create_provider_bundle(factory, settings)
+    adapters = tuple(
+        adapter
+        for adapter in (providers.chat_model, providers.web_search, providers.query_planner)
+        if adapter is not None
+    )
+    for adapter in adapters:
+        available = adapter.available
+        if not isinstance(available, bool):
+            raise TypeError("provider availability must be a boolean")
+        if available:
+            raise ValueError("provider must be unavailable when credentials are absent")
+
+    closed: set[int] = set()
+    for adapter in adapters:
+        if id(adapter) in closed:
+            continue
+        closed.add(id(adapter))
+        close = getattr(adapter, "close", None)
+        if close is None:
+            continue
+        if not callable(close):
+            raise TypeError("provider close attribute must be callable")
+        close()
+        close()
+
+
+__all__ = [
+    "ProviderBundle",
+    "ProviderFactory",
+    "create_provider_bundle",
+    "verify_offline_provider_factory",
+]

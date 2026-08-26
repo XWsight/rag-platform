@@ -46,3 +46,8 @@ class AcmeProviderFactory:
 内置智谱适配器是参考实现；其 transport、协议重试与工厂装配测试位于
 [`tests/test_providers.py`](../tests/test_providers.py) 和
 [`tests/test_provider_factory.py`](../tests/test_provider_factory.py)。
+
+派生脚手架默认生成的工厂测试会调用 `verify_offline_provider_factory`：它在清空环境、阻止
+socket 连接的条件下验证无凭据装配、严格布尔 `available` 状态和可选 `close()` 的幂等性。
+这项通用检查不调用 `answer` 或 `search`，因此不能替代上述适配器专属的错误映射、响应协议和
+引用失败关闭测试。

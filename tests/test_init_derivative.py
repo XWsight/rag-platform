@@ -147,6 +147,13 @@ class InitDerivativeTests(unittest.TestCase):
                         self.assertEqual(response.status_code, 200)
                         self.assertEqual(response.json()["items"], [])
                         self.assertEqual(client.get("/openapi.json").json()["info"]["title"], "Legal Assistant API")
+                    provider_test = importlib.import_module(
+                        f"{package_name}.tests.test_provider_factory"
+                    )
+                    result = unittest.TextTestRunner(stream=io.StringIO()).run(
+                        unittest.defaultTestLoader.loadTestsFromModule(provider_test)
+                    )
+                    self.assertTrue(result.wasSuccessful())
             finally:
                 sys.path.remove(str(root))
                 for module_name in tuple(sys.modules):
