@@ -35,7 +35,7 @@ from rag_system.catalog import (
 from rag_system.config import Settings
 from rag_system.coordination import ResourceJobRegistry, ResourceLockPool
 from rag_system.domain import AnswerRequest, AnswerResult
-from rag_system.file_store import FileStoreError
+from rag_system.file_store import FileStoreError, FileStoreIOError
 from rag_system.idempotency import (
     IdempotencyConflictError,
     IdempotencyUnavailableError,
@@ -219,6 +219,10 @@ class RagPlatform:
                 stored_document_ids = frozenset(
                     document.resource_id for document in failure.stored_documents
                 )
+                if isinstance(failure.__cause__, FileStoreIOError):
+                    stored_document_ids |= frozenset(
+                        document.resource_id for document in failure.attempted_documents
+                    )
                 if failure.__cause__ is None:
                     raise PlatformUnavailableError(
                         "document assets could not be stored"

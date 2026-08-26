@@ -23,8 +23,13 @@ class PlannedDocument:
 class AssetStoreFailure(RuntimeError):
     """Report which planned documents were committed before a store failure."""
 
-    def __init__(self, stored_documents: Sequence[PlannedDocument]) -> None:
+    def __init__(
+        self,
+        stored_documents: Sequence[PlannedDocument],
+        attempted_documents: Sequence[PlannedDocument],
+    ) -> None:
         self.stored_documents = tuple(stored_documents)
+        self.attempted_documents = tuple(attempted_documents)
         super().__init__("document assets could not be stored")
 
 
@@ -65,8 +70,10 @@ class KnowledgeBaseAssets:
 
     def store(self, principal: Principal, documents: Sequence[PlannedDocument]) -> None:
         stored: list[PlannedDocument] = []
+        attempted: list[PlannedDocument] = []
         try:
             for planned in documents:
+                attempted.append(planned)
                 saved = self._file_store.save(
                     principal.tenant_id.value,
                     planned.resource_id,
@@ -83,7 +90,7 @@ class KnowledgeBaseAssets:
                 ):
                     raise PlatformIntegrityError("stored document does not match its manifest")
         except Exception as exc:
-            raise AssetStoreFailure(stored) from exc
+            raise AssetStoreFailure(stored, attempted) from exc
 
     def resolve(
         self,

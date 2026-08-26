@@ -336,6 +336,23 @@ class PlatformTests(unittest.TestCase):
         self.assertEqual(resolved[0].name, "first.txt")
         self.assertEqual(resolved[0].read_bytes(), b"first evidence")
 
+    def test_failed_store_cleans_a_partial_current_document(self) -> None:
+        with patch.object(self.platform.file_store, "_rollback_resource"):
+            with patch("rag_system.file_store.os.replace", side_effect=OSError("disk full")):
+                with self.assertRaises(FileStoreIOError):
+                    self.platform.create_knowledge_base(
+                        self.tenant_a,
+                        display_name="Interrupted write",
+                        documents=(UploadDocument("partial.txt", b"partial evidence"),),
+                        idempotency_key="partial-current-document",
+                    )
+
+        self.assertEqual(self.platform.catalog.list(self.tenant_a), ())
+        self.assertEqual(
+            tuple(self.platform.file_store.root.glob("tenant-*/*")),
+            (),
+        )
+
     def test_create_answer_session_isolation_and_delete(self) -> None:
         record = self._create_ready()
         expected_namespace = f"tenant-a:{record.resource_id}"
