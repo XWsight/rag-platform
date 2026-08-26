@@ -23,8 +23,10 @@ python scripts\init_derivative.py `
 - 不访问外网的 Provider 工厂回归测试；
 - 产品展示配置覆盖示例；
 - 领域评测数据与治理说明。
+- `UPSTREAM.md`：生成时自动记录的基座 Git 提交，供后续同步和回滚审查。
 
 脚手架先在同一父目录的临时路径渲染并校验模板，完成后才发布目标目录；渲染异常不会留下可被误提交的半成品派生层。
+若当前副本没有可用 Git 元数据，可用 `--base-revision <commit>` 显式记录经审查的基座提交；否则该记录会显示为 `unrecorded`，必须在首次提交派生层前补齐。
 
 将生成目录、基座 `.env.example` 和你的领域配置一起提交；真实 `.env`、客户数据、模型响应和
 密钥不能提交。通过 `uvicorn legal_assistant.api_app:app` 启动派生 API，或通过

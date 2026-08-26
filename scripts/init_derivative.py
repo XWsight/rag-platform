@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import re
 import shutil
+import subprocess
 import tempfile
 from collections.abc import Sequence
 from pathlib import Path
@@ -13,6 +14,7 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _TEMPLATE_ROOT = _PROJECT_ROOT / "templates" / "derivative"
 _IDENTIFIER_PATTERN = re.compile(r"[a-z][a-z0-9_]{1,39}")
+_REVISION_PATTERN = re.compile(r"[0-9a-f]{7,64}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,6 +36,10 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Display tagline, 1-160 printable chars.",
     )
+    parser.add_argument(
+        "--base-revision",
+        help="Optional base Git commit to record; defaults to the current HEAD when available.",
+    )
     return parser
 
 
@@ -43,6 +49,7 @@ def create_derivative(
     output: Path,
     product_name: str,
     product_tagline: str,
+    base_revision: str | None = None,
 ) -> Path:
     """Copy and render the derivative layer without modifying an existing path."""
 
@@ -51,6 +58,7 @@ def create_derivative(
         raise ValueError("package_name must use 2-40 lowercase letters, digits, or underscores")
     normalized_name = _display_text(product_name, maximum=80, label="product_name")
     normalized_tagline = _display_text(product_tagline, maximum=160, label="product_tagline")
+    revision = _base_revision(base_revision)
     destination = output.expanduser().resolve()
     if destination == Path(destination.anchor):
         raise ValueError("output cannot be a filesystem root")
@@ -64,6 +72,7 @@ def create_derivative(
         "{{FACTORY_CLASS}}": _factory_class_name(normalized_package),
         "{{PRODUCT_NAME}}": normalized_name,
         "{{PRODUCT_TAGLINE}}": normalized_tagline,
+        "{{BASE_REVISION}}": revision,
     }
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=f".{destination.name}.", dir=destination.parent) as directory:
@@ -86,6 +95,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             output=args.output,
             product_name=args.product_name,
             product_tagline=args.product_tagline,
+            base_revision=args.base_revision,
         )
     except (FileExistsError, RuntimeError, ValueError) as error:
         parser.error(str(error))
@@ -103,6 +113,27 @@ def _display_text(value: str, *, maximum: int, label: str) -> str:
 
 def _factory_class_name(package_name: str) -> str:
     return "".join(part.capitalize() for part in package_name.split("_")) + "ProviderFactory"
+
+
+def _base_revision(value: str | None) -> str:
+    if value is not None:
+        revision = value.strip()
+        if _REVISION_PATTERN.fullmatch(revision) is None:
+            raise ValueError("base_revision must be a 7-64 character lowercase Git commit")
+        return revision
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", "HEAD"],
+            cwd=_PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            encoding="ascii",
+            timeout=3,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return "unrecorded"
+    revision = result.stdout.strip()
+    return revision if _REVISION_PATTERN.fullmatch(revision) is not None else "unrecorded"
 
 
 def _render_templates(destination: Path, replacements: dict[str, str]) -> None:

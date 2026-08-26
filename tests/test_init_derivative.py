@@ -36,6 +36,29 @@ class InitDerivativeTests(unittest.TestCase):
             api_entrypoint = (created / "api_app.py").read_text(encoding="utf-8")
             self.assertIn("LegalAssistantProviderFactory", api_entrypoint)
             self.assertIn("RAG_PRODUCT_NAME=Legal Assistant", (created / ".env.example").read_text())
+            self.assertIn("Upstream baseline", (created / "UPSTREAM.md").read_text())
+            self.assertNotIn("{{", (created / "UPSTREAM.md").read_text())
+
+    def test_accepts_an_explicit_base_revision_for_a_reproducible_baseline(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            revision = "0123456789abcdef0123456789abcdef01234567"
+            created = create_derivative(
+                package_name="research_assistant",
+                output=Path(directory) / "research_assistant",
+                product_name="Research Assistant",
+                product_tagline="Evidence workspace",
+                base_revision=revision,
+            )
+            self.assertIn(revision, (created / "UPSTREAM.md").read_text(encoding="utf-8"))
+
+            with self.assertRaises(ValueError):
+                create_derivative(
+                    package_name="invalid_revision",
+                    output=Path(directory) / "invalid_revision",
+                    product_name="Invalid Revision",
+                    product_tagline="Evidence workspace",
+                    base_revision="not-a-git-revision",
+                )
 
     def test_refuses_to_overwrite_an_existing_destination(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

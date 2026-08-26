@@ -1,0 +1,9 @@
+# Upstream baseline
+
+This derivative layer was generated from RAG Studio base revision:
+
+`{{BASE_REVISION}}`
+
+Before synchronizing the base, record the incoming base revision, run the base quality gate and
+the domain evaluation suite, then document the resulting metrics and rollback commit in this file.
+Do not treat this record as a replacement for a tested backup or deployment rollback plan.
