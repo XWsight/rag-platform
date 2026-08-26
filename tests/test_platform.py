@@ -169,22 +169,25 @@ class PlatformTests(unittest.TestCase):
         self.fail("background job did not complete")
 
     def _stage_preparing(self, *, key: str, documents: tuple[UploadDocument, ...]):
-        uploads = self.platform._uploads.prepare(documents)
+        uploads = self.platform._lifecycle._uploads.prepare(documents)
         reservation = self.platform.idempotency.reserve(
             self.tenant_a,
             "knowledge_base.create",
             key,
-            self.platform._uploads.request_digest("Interrupted upload", uploads),
+            self.platform._lifecycle._uploads.request_digest(
+                "Interrupted upload",
+                uploads,
+            ),
         )
         record = self.platform.catalog.create(
             self.tenant_a,
             "Interrupted upload",
             idempotency_reservation_id=reservation.reservation_id,
         )
-        planned = self.platform._assets.plan(
+        planned = self.platform._lifecycle.assets.plan(
             self.tenant_a,
             uploads,
-            new_document_id=self.platform._uploads.new_document_id,
+            new_document_id=self.platform._lifecycle._uploads.new_document_id,
         )
         record = self.platform.catalog.attach_manifest(
             self.tenant_a,
@@ -199,7 +202,7 @@ class PlatformTests(unittest.TestCase):
             key="complete-preparing",
             documents=documents,
         )
-        self.platform._assets.store(self.tenant_a, planned)
+        self.platform._lifecycle.assets.store(self.tenant_a, planned)
 
         self.assertEqual(self.platform.recover_incomplete((self.tenant_a,)), 1)
         replay = self.platform.create_knowledge_base(
@@ -229,7 +232,7 @@ class PlatformTests(unittest.TestCase):
             key="partial-preparing",
             documents=documents,
         )
-        self.platform._assets.store(self.tenant_a, planned[:1])
+        self.platform._lifecycle.assets.store(self.tenant_a, planned[:1])
 
         self.assertEqual(self.platform.recover_incomplete((self.tenant_a,)), 1)
         with self.assertRaises(KnowledgeBaseUnavailableError):
@@ -270,7 +273,7 @@ class PlatformTests(unittest.TestCase):
             key="cleanup-preparing",
             documents=documents,
         )
-        self.platform._assets.store(self.tenant_a, planned[:1])
+        self.platform._lifecycle.assets.store(self.tenant_a, planned[:1])
 
         with patch.object(
             self.platform.file_store,
@@ -345,7 +348,7 @@ class PlatformTests(unittest.TestCase):
             first.knowledge_base.resource_id,
         )
         self.assertEqual(original.status, KnowledgeBaseStatus.READY)
-        resolved = platform._assets.resolve(self.tenant_a, original)
+        resolved = platform._lifecycle.assets.resolve(self.tenant_a, original)
         self.assertEqual(len(resolved), 1)
         self.assertEqual(resolved[0].name, "first.txt")
         self.assertEqual(resolved[0].read_bytes(), b"first evidence")

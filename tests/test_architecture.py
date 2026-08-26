@@ -22,6 +22,7 @@ FRAMEWORK_NEUTRAL_MODULES = (
     "rag_system/indexing.py",
     "rag_system/health.py",
     "rag_system/job_contracts.py",
+    "rag_system/knowledge_base_lifecycle.py",
     "rag_system/retrieval_experiments.py",
 )
 FORBIDDEN_FRAMEWORK_PREFIXES = (
@@ -68,6 +69,17 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         self.assertIn("rag_system.application", imports)
 
     def test_platform_depends_on_runtime_ports_not_concrete_adapters(self) -> None:
+        self._assert_runtime_port_boundary("rag_system/platform.py")
+
+    def test_workflows_depend_on_runtime_ports_not_concrete_adapters(self) -> None:
+        for relative in (
+            "rag_system/answer_workflow.py",
+            "rag_system/knowledge_base_lifecycle.py",
+        ):
+            with self.subTest(module=relative):
+                self._assert_runtime_port_boundary(relative)
+
+    def _assert_runtime_port_boundary(self, relative: str) -> None:
         forbidden = {
             "LocalVectorIndexRepository",
             "IdempotencyStore",
@@ -76,7 +88,7 @@ class ArchitectureBoundaryTests(unittest.TestCase):
             "RagService",
             "TenantFileStore",
         }
-        imported = set(_imported_symbols(ROOT / "rag_system/platform.py"))
+        imported = set(_imported_symbols(ROOT / relative))
         self.assertEqual(sorted(imported & forbidden), [])
 
     def test_application_layers_do_not_depend_on_the_job_executor(self) -> None:
@@ -87,6 +99,7 @@ class ArchitectureBoundaryTests(unittest.TestCase):
             "rag_system/api_errors.py",
             "rag_system/coordination.py",
             "rag_system/indexing.py",
+            "rag_system/knowledge_base_lifecycle.py",
             "rag_system/platform.py",
         )
         violations = [
