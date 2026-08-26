@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable, Sequence
+from threading import Lock
 
 from rag_system.answer_workflow import KnowledgeBaseAnswerWorkflow
 from rag_system.application import (
@@ -78,6 +79,8 @@ class RagPlatform:
             resource_locks=self._lifecycle.resource_locks,
             metrics=self.metrics,
         )
+        self._close_lock = Lock()
+        self._closed = False
 
     def create_knowledge_base(
         self,
@@ -154,15 +157,35 @@ class RagPlatform:
         return self._answers.clear_session(principal, resource_id, session_id)
 
     def close(self) -> None:
-        try:
-            self.jobs.shutdown(wait=True, cancel_pending=True)
-        finally:
-            try:
-                self.service.index_manager.close()
-            finally:
-                close_service = getattr(self.service, "close", None)
-                if callable(close_service):
+        """Release owned runtime resources once, while attempting every cleanup."""
+
+        with self._close_lock:
+            if self._closed:
+                return
+            self._closed = True
+
+            failure: Exception | None = None
+            closers: tuple[Callable[[], None], ...] = (
+                lambda: self.jobs.shutdown(wait=True, cancel_pending=True),
+                self.service.index_manager.close,
+            )
+            for close in closers:
+                try:
+                    close()
+                except Exception as error:
+                    if failure is None:
+                        failure = error
+
+            close_service = getattr(self.service, "close", None)
+            if callable(close_service):
+                try:
                     close_service()
+                except Exception as error:
+                    if failure is None:
+                        failure = error
+
+            if failure is not None:
+                raise failure
 
 
 __all__ = [

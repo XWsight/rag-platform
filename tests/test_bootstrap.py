@@ -54,8 +54,10 @@ class _TestProviderFactory:
 class _RuntimeIndexManager:
     def __init__(self) -> None:
         self.closed = False
+        self.close_calls = 0
 
     def close(self) -> None:
+        self.close_calls += 1
         self.closed = True
 
     def healthcheck(self) -> bool:
@@ -66,17 +68,22 @@ class _RuntimeService:
     def __init__(self) -> None:
         self.index_manager = _RuntimeIndexManager()
         self.closed = False
+        self.close_calls = 0
 
     def close(self) -> None:
+        self.close_calls += 1
         self.closed = True
 
 
 class _RuntimeJobs:
-    def __init__(self) -> None:
+    def __init__(self, *, fail_shutdown: bool = False) -> None:
         self.shutdown_calls = 0
+        self.fail_shutdown = fail_shutdown
 
     def shutdown(self, *, wait: bool = True, cancel_pending: bool = True) -> None:
         self.shutdown_calls += 1
+        if self.fail_shutdown:
+            raise RuntimeError("job shutdown failure")
 
     def healthcheck(self) -> bool:
         return True
@@ -198,8 +205,11 @@ class BootstrapTests(unittest.TestCase):
                 self.assertTrue(runtime.ready())
             finally:
                 runtime.close()
+                runtime.close()
 
             self.assertEqual(jobs.shutdown_calls, 1)
+            self.assertEqual(service.index_manager.close_calls, 1)
+            self.assertEqual(service.close_calls, 1)
             self.assertTrue(service.index_manager.closed)
             self.assertTrue(service.closed)
 
@@ -232,6 +242,41 @@ class BootstrapTests(unittest.TestCase):
             self.assertEqual(jobs.shutdown_calls, 1)
             self.assertTrue(service.index_manager.closed)
             self.assertTrue(service.closed)
+            recovered_lease = StorageRootLease.acquire(Path(directory))
+            recovered_lease.close()
+
+    def test_runtime_close_finishes_cleanup_after_a_shutdown_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            settings = replace(
+                Settings(),
+                persist_data=True,
+                storage_root=Path(directory),
+                api_keys_json=SecretValue(
+                    '{"0123456789abcdef":{"subject":"operator",'
+                    '"tenant_id":"tenant-a","roles":["operator"]}}'
+                ),
+            )
+            service = _RuntimeService()
+            jobs = _RuntimeJobs(fail_shutdown=True)
+            profile = _TestRuntimeProfile(
+                RuntimeComponents(
+                    service=service,
+                    catalog=_RuntimeCatalog(),
+                    file_store=_RuntimeFileStore(),
+                    jobs=jobs,
+                    idempotency=_RuntimeIdempotency(),
+                )
+            )
+            with patch("rag_system.bootstrap.load_settings", return_value=settings):
+                runtime = build_production_runtime(runtime_profile=profile)
+
+            with self.assertRaisesRegex(RuntimeError, "job shutdown failure"):
+                runtime.close()
+            runtime.close()
+
+            self.assertEqual(jobs.shutdown_calls, 1)
+            self.assertEqual(service.index_manager.close_calls, 1)
+            self.assertEqual(service.close_calls, 1)
 
 
 if __name__ == "__main__":
