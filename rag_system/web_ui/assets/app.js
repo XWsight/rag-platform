@@ -2,6 +2,8 @@
 
 const KEY_STORAGE = "rag-studio-api-key";
 const ACTIVE_STORAGE = "rag-studio-active-base";
+const KNOWLEDGE_BASE_PAGE_SIZE = 100;
+const MAX_KNOWLEDGE_BASE_OFFSET = 10000;
 
 const state = {
   apiKey: readSession(KEY_STORAGE),
@@ -234,8 +236,14 @@ function renderKnowledgeBases() {
 }
 
 async function loadKnowledgeBases({selectDefault = false} = {}) {
-  const payload = await api("/v1/knowledge-bases?limit=100&offset=0");
-  state.knowledgeBases = payload.items || [];
+  const knowledgeBases = [];
+  for (let offset = 0; offset <= MAX_KNOWLEDGE_BASE_OFFSET; offset += KNOWLEDGE_BASE_PAGE_SIZE) {
+    const payload = await api(`/v1/knowledge-bases?limit=${KNOWLEDGE_BASE_PAGE_SIZE}&offset=${offset}`);
+    const page = Array.isArray(payload?.items) ? payload.items : [];
+    knowledgeBases.push(...page);
+    if (page.length < KNOWLEDGE_BASE_PAGE_SIZE) break;
+  }
+  state.knowledgeBases = knowledgeBases;
   if (state.activeId && !state.knowledgeBases.some((item) => item.id === state.activeId)) {
     state.activeId = "";
   }

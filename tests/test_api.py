@@ -268,6 +268,10 @@ class ApiTests(unittest.TestCase):
         self.assertIn("requestExternalConsent", script.text)
         self.assertIn("navigator.clipboard.writeText", script.text)
         self.assertIn("loadProductConfiguration", script.text)
+        self.assertIn("KNOWLEDGE_BASE_PAGE_SIZE = 100", script.text)
+        self.assertIn("MAX_KNOWLEDGE_BASE_OFFSET = 10000", script.text)
+        self.assertIn("offset <= MAX_KNOWLEDGE_BASE_OFFSET", script.text)
+        self.assertNotIn('"/v1/knowledge-bases?limit=100&offset=0"', script.text)
         self.assertEqual(stylesheet.status_code, 200)
         self.assertIn(".app-shell", stylesheet.text)
 
