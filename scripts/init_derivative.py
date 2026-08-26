@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import re
 import shutil
+import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -65,14 +66,14 @@ def create_derivative(
         "{{PRODUCT_TAGLINE}}": normalized_tagline,
     }
     destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(_TEMPLATE_ROOT, destination)
-    for template_path in sorted(destination.rglob("*.template")):
-        rendered = template_path.read_text(encoding="utf-8")
-        for token, value in replacements.items():
-            rendered = rendered.replace(token, value)
-        target_path = template_path.with_suffix("")
-        target_path.write_text(rendered, encoding="utf-8", newline="\n")
-        template_path.unlink()
+    with tempfile.TemporaryDirectory(prefix=f".{destination.name}.", dir=destination.parent) as directory:
+        staged = Path(directory) / destination.name
+        shutil.copytree(_TEMPLATE_ROOT, staged)
+        _render_templates(staged, replacements)
+        try:
+            staged.rename(destination)
+        except FileExistsError:
+            raise FileExistsError("output already exists; refusing to overwrite it") from None
     return destination
 
 
@@ -102,6 +103,19 @@ def _display_text(value: str, *, maximum: int, label: str) -> str:
 
 def _factory_class_name(package_name: str) -> str:
     return "".join(part.capitalize() for part in package_name.split("_")) + "ProviderFactory"
+
+
+def _render_templates(destination: Path, replacements: dict[str, str]) -> None:
+    for template_path in sorted(destination.rglob("*.template")):
+        rendered = template_path.read_text(encoding="utf-8")
+        for token, value in replacements.items():
+            rendered = rendered.replace(token, value)
+        unresolved = sorted(set(re.findall(r"\{\{[A-Z_]+\}\}", rendered)))
+        if unresolved:
+            raise RuntimeError("derivative template contains unresolved placeholders")
+        target_path = template_path.with_suffix("")
+        target_path.write_text(rendered, encoding="utf-8", newline="\n")
+        template_path.unlink()
 
 
 if __name__ == "__main__":

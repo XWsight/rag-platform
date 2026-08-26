@@ -50,6 +50,19 @@ class InitDerivativeTests(unittest.TestCase):
                     product_tagline="Evidence workspace",
                 )
 
+    def test_render_failure_leaves_no_partial_destination(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "partial"
+            with patch("scripts.init_derivative.Path.write_text", side_effect=OSError("disk full")):
+                with self.assertRaises(OSError):
+                    create_derivative(
+                        package_name="partial_layer",
+                        output=destination,
+                        product_name="Partial Layer",
+                        product_tagline="Evidence workspace",
+                    )
+            self.assertFalse(destination.exists())
+
     def test_command_reports_invalid_inputs_without_creating_output(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory) / "invalid"

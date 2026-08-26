@@ -24,6 +24,8 @@ python scripts\init_derivative.py `
 - 产品展示配置覆盖示例；
 - 领域评测数据与治理说明。
 
+脚手架先在同一父目录的临时路径渲染并校验模板，完成后才发布目标目录；渲染异常不会留下可被误提交的半成品派生层。
+
 将生成目录、基座 `.env.example` 和你的领域配置一起提交；真实 `.env`、客户数据、模型响应和
 密钥不能提交。通过 `uvicorn legal_assistant.api_app:app` 启动派生 API，或通过
 `python -m legal_assistant.local_app` 启动本地工作台。
