@@ -84,6 +84,15 @@ class RagApplication(Protocol):
         offset: int = 0,
     ) -> tuple[KnowledgeBaseRecord, ...]: ...
 
+    def list_knowledge_bases_after(
+        self,
+        principal: Principal,
+        *,
+        updated_at: float,
+        resource_id: str,
+        limit: int = 50,
+    ) -> tuple[KnowledgeBaseRecord, ...]: ...
+
     def delete_knowledge_base(self, principal: Principal, resource_id: str) -> bool: ...
 
     def get_job(self, principal: Principal, job_id: JobId | str) -> JobSnapshot: ...

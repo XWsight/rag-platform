@@ -285,6 +285,21 @@ class RagPlatform:
     ) -> tuple[KnowledgeBaseRecord, ...]:
         return self.catalog.list(principal, limit=limit, offset=offset)
 
+    def list_knowledge_bases_after(
+        self,
+        principal: Principal,
+        *,
+        updated_at: float,
+        resource_id: str,
+        limit: int = 50,
+    ) -> tuple[KnowledgeBaseRecord, ...]:
+        return self.catalog.list_after(
+            principal,
+            updated_at=updated_at,
+            resource_id=resource_id,
+            limit=limit,
+        )
+
     def get_job(self, principal: Principal, job_id: JobId | str) -> JobSnapshot:
         return self.jobs.get(principal.tenant_id.value, job_id)
 

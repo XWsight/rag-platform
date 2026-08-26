@@ -258,6 +258,28 @@ class CatalogTests(unittest.TestCase):
             with self.subTest(limit=bad_limit), self.assertRaises(CatalogValidationError):
                 self.catalog.list(self.tenant_a, limit=bad_limit)
 
+    def test_list_after_uses_stable_keyset_pagination(self) -> None:
+        for index in range(3):
+            self.catalog.create(self.tenant_a, f"资料 {index}")
+        first_page = self.catalog.list(self.tenant_a, limit=2)
+        self.assertEqual(len(first_page), 2)
+        second_page = self.catalog.list_after(
+            self.tenant_a,
+            updated_at=first_page[-1].updated_at,
+            resource_id=first_page[-1].resource_id,
+            limit=2,
+        )
+        self.assertEqual(
+            [record.resource_id for record in first_page + second_page],
+            [record.resource_id for record in self.catalog.list(self.tenant_a, limit=3)],
+        )
+        with self.assertRaises(CatalogValidationError):
+            self.catalog.list_after(
+                self.tenant_a,
+                updated_at=float("nan"),
+                resource_id=first_page[-1].resource_id,
+            )
+
     def test_manifest_paths_and_json_are_strict(self) -> None:
         digest = hashlib.sha256(b"x").hexdigest()
         for path in ("/absolute.txt", "../escape.txt", "a/../b.txt", "a//b.txt", "C:/file.txt"):

@@ -364,6 +364,35 @@ class KnowledgeBaseCatalog:
             ).fetchall()
         return tuple(_record_from_row(row) for row in rows)
 
+    def list_after(
+        self,
+        principal: Principal,
+        *,
+        updated_at: float,
+        resource_id: str,
+        limit: int = 50,
+    ) -> tuple[KnowledgeBaseRecord, ...]:
+        """Return the next stable page without a costly deep SQL offset."""
+
+        tenant_id = _principal_tenant(principal)
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= _MAX_LIST_LIMIT:
+            raise CatalogValidationError(f"limit must be between 1 and {_MAX_LIST_LIMIT}.")
+        if not _valid_timestamp(updated_at):
+            raise CatalogValidationError("cursor timestamp is invalid.")
+        clean_resource_id = _safe_resource_lookup_id(resource_id)
+        with self._read_connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM knowledge_bases
+                WHERE tenant_id = ?
+                  AND (updated_at < ? OR (updated_at = ? AND resource_id < ?))
+                ORDER BY updated_at DESC, resource_id DESC
+                LIMIT ?
+                """,
+                (tenant_id.value, updated_at, updated_at, clean_resource_id, limit),
+            ).fetchall()
+        return tuple(_record_from_row(row) for row in rows)
+
     def attach_manifest(
         self,
         principal: Principal,

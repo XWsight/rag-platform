@@ -82,6 +82,7 @@ class KnowledgeBaseListResponse(StrictModel):
     count: int = Field(ge=0)
     limit: int = Field(ge=1, le=100)
     offset: int = Field(ge=0)
+    next_cursor: str | None = Field(default=None, max_length=256)
 
 
 class DeleteResponse(StrictModel):

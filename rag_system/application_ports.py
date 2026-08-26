@@ -45,6 +45,15 @@ class KnowledgeBaseRepository(Protocol):
         offset: int = 0,
     ) -> tuple[KnowledgeBaseRecord, ...]: ...
 
+    def list_after(
+        self,
+        principal: Principal,
+        *,
+        updated_at: float,
+        resource_id: str,
+        limit: int = 50,
+    ) -> tuple[KnowledgeBaseRecord, ...]: ...
+
     def attach_manifest(
         self,
         principal: Principal,

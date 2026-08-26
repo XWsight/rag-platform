@@ -105,6 +105,17 @@ class FakePlatform:
             raise self.raise_on_list
         return (self.record,)
 
+    def list_knowledge_bases_after(
+        self,
+        principal: Principal,
+        *,
+        updated_at: float,
+        resource_id: str,
+        limit: int,
+    ):
+        del principal, updated_at, resource_id, limit
+        return ()
+
     def get_knowledge_base(self, principal: Principal, resource_id: str):
         del principal
         if resource_id != KNOWLEDGE_BASE_ID:
@@ -269,8 +280,10 @@ class ApiTests(unittest.TestCase):
         self.assertIn("navigator.clipboard.writeText", script.text)
         self.assertIn("loadProductConfiguration", script.text)
         self.assertIn("KNOWLEDGE_BASE_PAGE_SIZE = 100", script.text)
-        self.assertIn("MAX_KNOWLEDGE_BASE_OFFSET = 10000", script.text)
-        self.assertIn("offset <= MAX_KNOWLEDGE_BASE_OFFSET", script.text)
+        self.assertIn("let cursor = \"\"", script.text)
+        self.assertIn("query.set(\"cursor\", cursor)", script.text)
+        self.assertIn("payload?.next_cursor", script.text)
+        self.assertNotIn("MAX_KNOWLEDGE_BASE_OFFSET", script.text)
         self.assertNotIn('"/v1/knowledge-bases?limit=100&offset=0"', script.text)
         self.assertEqual(stylesheet.status_code, 200)
         self.assertIn(".app-shell", stylesheet.text)
@@ -560,6 +573,37 @@ class ApiTests(unittest.TestCase):
         self.assertNotIn("tenant-one", second.text)
         self.assertEqual(second.json()["error"]["code"], "rate_limit_exceeded")
 
+    def test_knowledge_base_listing_supports_safe_cursor_pagination(self) -> None:
+        first = self.client.get(
+            "/v1/knowledge-bases?limit=1",
+            headers=self._headers(),
+        )
+        self.assertEqual(first.status_code, 200)
+        cursor = first.json()["next_cursor"]
+        self.assertIsInstance(cursor, str)
+
+        next_page = self.client.get(
+            f"/v1/knowledge-bases?limit=1&cursor={cursor}",
+            headers=self._headers(),
+        )
+        self.assertEqual(next_page.status_code, 200)
+        self.assertEqual(next_page.json()["items"], [])
+        self.assertIsNone(next_page.json()["next_cursor"])
+
+        invalid = self.client.get(
+            "/v1/knowledge-bases?cursor=not-a-valid-cursor",
+            headers=self._headers(),
+        )
+        self.assertEqual(invalid.status_code, 422)
+        self.assertEqual(invalid.json()["error"]["code"], "invalid_request")
+
+        combined = self.client.get(
+            f"/v1/knowledge-bases?offset=1&cursor={cursor}",
+            headers=self._headers(),
+        )
+        self.assertEqual(combined.status_code, 422)
+        self.assertEqual(combined.json()["error"]["code"], "invalid_request")
+
     def test_metrics_require_operator_and_use_prometheus_content_type(self) -> None:
         response = self.client.get("/metrics", headers=self._headers(OPERATOR_KEY))
         self.assertEqual(response.status_code, 200)
@@ -613,6 +657,8 @@ class ApiTests(unittest.TestCase):
         list_operation = response.json()["paths"]["/v1/knowledge-bases"]["get"]
         offset = next(item for item in list_operation["parameters"] if item["name"] == "offset")
         self.assertEqual(offset["schema"]["maximum"], 10_000)
+        cursor = next(item for item in list_operation["parameters"] if item["name"] == "cursor")
+        self.assertEqual(cursor["schema"]["anyOf"][0]["maxLength"], 256)
         create_operation = document["paths"]["/v1/knowledge-bases"]["post"]
         idempotency_header = next(
             item

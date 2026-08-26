@@ -1,6 +1,8 @@
 """Authenticated, tenant-scoped HTTP boundary for the production service."""
 
+import base64
 import hashlib
+import json
 import logging
 import math
 import re
@@ -444,12 +446,31 @@ def create_app(
         principal: Annotated[Principal, Depends(reader)],
         limit: Annotated[int, Query(ge=1, le=100)] = 50,
         offset: Annotated[int, Query(ge=0, le=10_000)] = 0,
+        cursor: Annotated[str | None, Query(max_length=256)] = None,
     ) -> KnowledgeBaseListResponse:
         request.state.operation = "index"
         consume(request, principal)
-        records = platform.list_knowledge_bases(principal, limit=limit, offset=offset)
+        if cursor is None:
+            records = platform.list_knowledge_bases(principal, limit=limit, offset=offset)
+        else:
+            if offset != 0:
+                raise ApiBoundaryError(422, "invalid_request", "Cursor and offset cannot be combined.")
+            updated_at, resource_id = _decode_knowledge_base_cursor(cursor)
+            records = platform.list_knowledge_bases_after(
+                principal,
+                updated_at=updated_at,
+                resource_id=resource_id,
+                limit=limit,
+            )
         items = tuple(knowledge_base_response(record) for record in records)
-        return KnowledgeBaseListResponse(items=items, count=len(items), limit=limit, offset=offset)
+        next_cursor = _encode_knowledge_base_cursor(items[-1]) if len(items) == limit else None
+        return KnowledgeBaseListResponse(
+            items=items,
+            count=len(items),
+            limit=limit,
+            offset=offset,
+            next_cursor=next_cursor,
+        )
 
     @app.get(
         "/v1/knowledge-bases/{knowledge_base_id}",
@@ -703,6 +724,36 @@ def _raw_headers(request: Request) -> tuple[tuple[str, str], ...]:
     for name, value in request.scope.get("headers", ()):
         result.append((name.decode("latin-1"), value.decode("latin-1")))
     return tuple(result)
+
+
+def _encode_knowledge_base_cursor(record: KnowledgeBaseResponse) -> str:
+    payload = json.dumps(
+        [record.updated_at, record.id],
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("ascii")
+    return base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
+
+
+def _decode_knowledge_base_cursor(cursor: str) -> tuple[float, str]:
+    try:
+        padding = "=" * (-len(cursor) % 4)
+        decoded = base64.b64decode(cursor + padding, altchars=b"-_", validate=True)
+        value = json.loads(decoded.decode("ascii"))
+    except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
+        raise ApiBoundaryError(422, "invalid_request", "Knowledge base cursor is invalid.") from None
+    if (
+        not isinstance(value, list)
+        or len(value) != 2
+        or isinstance(value[0], bool)
+        or not isinstance(value[0], (int, float))
+        or not math.isfinite(value[0])
+        or value[0] < 0
+        or not isinstance(value[1], str)
+        or re.fullmatch(_RESOURCE_PATTERN, value[1]) is None
+    ):
+        raise ApiBoundaryError(422, "invalid_request", "Knowledge base cursor is invalid.")
+    return float(value[0]), value[1]
 
 
 def _error_response(
