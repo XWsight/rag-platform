@@ -68,6 +68,7 @@ module = [
   "rag_system.api",
   "rag_system.api_error_handlers",
   "rag_system.api_request_context",
+  "rag_system.api_resource_routes",
   "rag_system.web_ui",
 ]
 # FastAPI route decorators are dynamically typed. Keep strict checking of

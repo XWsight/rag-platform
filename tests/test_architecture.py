@@ -48,7 +48,11 @@ class ArchitectureBoundaryTests(unittest.TestCase):
     def test_application_and_http_layers_do_not_import_concrete_providers(self) -> None:
         violations = [
             f"{relative}: {imported}"
-            for relative in ("rag_system/service.py", "rag_system/api.py")
+            for relative in (
+                "rag_system/service.py",
+                "rag_system/api.py",
+                "rag_system/api_resource_routes.py",
+            )
             for imported in _imports(ROOT / relative)
             if imported == "rag_system.providers"
         ]
@@ -66,9 +70,11 @@ class ArchitectureBoundaryTests(unittest.TestCase):
             "rag_system.retrieval",
             "rag_system.service",
         }
-        imports = set(_imports(ROOT / "rag_system/api.py"))
-        self.assertEqual(sorted(imports & forbidden), [])
-        self.assertIn("rag_system.application", imports)
+        for relative in ("rag_system/api.py", "rag_system/api_resource_routes.py"):
+            with self.subTest(module=relative):
+                imports = set(_imports(ROOT / relative))
+                self.assertEqual(sorted(imports & forbidden), [])
+                self.assertIn("rag_system.application", imports)
 
     def test_platform_depends_on_runtime_ports_not_concrete_adapters(self) -> None:
         self._assert_runtime_port_boundary("rag_system/platform.py")
