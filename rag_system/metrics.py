@@ -613,7 +613,7 @@ def create_operational_metrics(namespace: str = "rag") -> OperationalMetrics:
         label_names=("provider", "operation", "error_type"),
         allowed_label_values={
             "provider": {"chat", "embedding", "reranker", "web_search"},
-            "operation": {"generate", "embed", "rerank", "search"},
+            "operation": {"generate", "plan", "embed", "rerank", "search"},
             "error_type": {
                 "authentication",
                 "protocol",

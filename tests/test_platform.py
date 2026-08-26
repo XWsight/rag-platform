@@ -318,6 +318,45 @@ class PlatformTests(unittest.TestCase):
             self.platform.get_knowledge_base(self.tenant_a, record.resource_id)
         self.assertIn(record.internal_index_id, self.service.index_manager.deleted)
 
+    def test_answer_records_sanitized_external_provider_failure_metrics(self) -> None:
+        record = self._create_ready()
+        original_answer = self.service.answer
+
+        def failed_answer(*_args, **_kwargs):
+            return AnswerResult(
+                answer="safe fallback",
+                decision=RouteDecision(Route.ERROR, 0.4, "provider failed"),
+                diagnostics={
+                    "provider_error": "ProviderRateLimitError",
+                    "planning_error": "ProviderProtocolError",
+                    "web_error": "ProviderUnavailableError",
+                    "web_error_count": 2,
+                },
+            )
+
+        self.service.answer = failed_answer
+        self.addCleanup(setattr, self.service, "answer", original_answer)
+        self.platform.answer(
+            self.tenant_a,
+            record.resource_id,
+            AnswerRequest("question", "session"),
+        )
+
+        rendered = self.platform.metrics.registry.render_prometheus()
+        self.assertIn(
+            'provider="chat",operation="generate",error_type="rate_limit"} 1',
+            rendered,
+        )
+        self.assertIn(
+            'provider="chat",operation="plan",error_type="protocol"} 1',
+            rendered,
+        )
+        self.assertIn(
+            'provider="web_search",operation="search",error_type="unavailable"} 2',
+            rendered,
+        )
+        self.assertNotIn("provider failed", rendered)
+
     def test_cross_tenant_access_is_indistinguishable_from_missing(self) -> None:
         record = self._create_ready()
         messages = []

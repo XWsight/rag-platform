@@ -164,7 +164,7 @@ curl --fail http://127.0.0.1:8000/health/ready
 
 容器健康后，浏览器访问 `http://127.0.0.1:8000/app`。首次进入时粘贴 `.env` 中配置的租户 API Key；密钥仅在当前标签会话中保存。
 
-Compose 默认仅发布到 `127.0.0.1`，使用非 root 用户、只读容器根文件系统、最小权限、资源上限、日志轮转和 `/data` 持久卷。公网访问必须由可信反向代理终止 TLS。备份、恢复、升级、回滚、密钥轮换和删除要求见[部署说明](docs/deployment.md)与[运维手册](docs/operations.md)。
+Compose 默认仅发布到 `127.0.0.1`，使用非 root 用户、只读容器根文件系统、最小权限、资源上限、日志轮转和 `/data` 持久卷。公网访问必须由可信反向代理终止 TLS。备份、恢复、升级、回滚、密钥轮换和删除要求见[部署说明](docs/deployment.md)与[运维手册](docs/operations.md)；Prometheus 抓取与告警的受控部署方式见[监控说明](docs/monitoring.md)。
 
 ## 验证与评测
 

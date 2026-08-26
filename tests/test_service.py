@@ -55,13 +55,16 @@ class FakeChat:
 
 
 class FakeWeb:
-    def __init__(self, results=(), *, available=True):
+    def __init__(self, results=(), *, available=True, error=None):
         self.results = results
         self.available = available
+        self.error = error
         self.calls = 0
 
     def search(self, query, *, count):
         self.calls += 1
+        if self.error:
+            raise self.error
         return self.results
 
 
@@ -223,6 +226,24 @@ class RagServiceTests(unittest.TestCase):
         self.assertEqual(web.calls, service.settings.research_max_web_queries)
         self.assertEqual(result.diagnostics["web_query_count"], 3)
         self.assertEqual(result.decision.route, Route.HYBRID)
+
+    def test_web_failures_are_counted_without_exposing_the_error_message(self) -> None:
+        service, _, web = self.build_service(
+            make_hit(0.9),
+            web=FakeWeb(error=ProviderUnavailableError("network details stay private")),
+            planner=FakePlanner(("查询一", "查询二")),
+        )
+        result = service.answer(
+            "idx",
+            AnswerRequest("复杂问题", "session", True, True, True),
+        )
+
+        self.assertEqual(web.calls, service.settings.research_max_web_queries)
+        self.assertEqual(result.diagnostics["web_error"], "ProviderUnavailableError")
+        self.assertEqual(
+            result.diagnostics["web_error_count"], service.settings.research_max_web_queries
+        )
+        self.assertNotIn("network details", str(result.diagnostics))
 
 
 if __name__ == "__main__":

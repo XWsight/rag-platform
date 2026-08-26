@@ -135,6 +135,7 @@ class RagService:
         selected_hits = hits if decision.route in {Route.LOCAL, Route.HYBRID} else ()
         citations, evidence = self._local_evidence(selected_hits)
         web_error = ""
+        web_error_count = 0
         web_domain_count = 0
         web_query_count = 0
 
@@ -156,6 +157,7 @@ class RagService:
                         web_query_count += 1
                     except (ProviderError, ValueError) as error:
                         web_error = type(error).__name__
+                        web_error_count += 1
                 web_results = tuple(web_results_list)
                 web_citations, web_evidence, web_domain_count = self._web_evidence(
                     question, web_results
@@ -177,6 +179,7 @@ class RagService:
                 started=started,
                 diagnostics={
                     "web_error": web_error,
+                    "web_error_count": web_error_count,
                     "evidence_count": 0,
                     "history_turns": history_turns,
                     "planned_query_count": len(query_plan),
@@ -239,6 +242,7 @@ class RagService:
                 "grounding_citation_count": grounding_citation_count,
                 "citation_completeness": 1.0 if claims else 0.0,
                 "web_error": web_error,
+                "web_error_count": web_error_count,
                 "web_domain_count": web_domain_count,
                 "history_turns": history_turns,
                 "planned_query_count": len(query_plan),

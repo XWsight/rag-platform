@@ -335,12 +335,69 @@ class RagPlatform:
         if internal_index_id is None:
             raise KnowledgeBaseNotReadyError("knowledge base is not ready")
         try:
-            return self.service.answer(internal_index_id, scoped_request)
+            result = self.service.answer(internal_index_id, scoped_request)
+            self._record_external_call_failures(result)
+            return result
         except KeyError:
             current = self.catalog.get(principal, resource_id)
             if current.status is not KnowledgeBaseStatus.READY:
                 raise KnowledgeBaseNotReadyError("knowledge base is not ready") from None
             raise KnowledgeBaseNotReadyError("knowledge base index is being reloaded") from None
+
+    def _record_external_call_failures(self, result: AnswerResult) -> None:
+        """Publish bounded provider failures without exposing request content."""
+
+        diagnostics = result.diagnostics
+        self._record_external_call_failure(
+            diagnostics.get("provider_error"),
+            provider="chat",
+            operation="generate",
+        )
+        planning_error = diagnostics.get("planning_error")
+        if planning_error != "planner_unavailable":
+            self._record_external_call_failure(
+                planning_error,
+                provider="chat",
+                operation="plan",
+            )
+        self._record_external_call_failure(
+            diagnostics.get("web_error"),
+            provider="web_search",
+            operation="search",
+            count=diagnostics.get("web_error_count"),
+        )
+
+    def _record_external_call_failure(
+        self,
+        error_name: object,
+        *,
+        provider: str,
+        operation: str,
+        count: object = 1,
+    ) -> None:
+        if not isinstance(error_name, str) or not error_name:
+            return
+        error_type = {
+            "ProviderAuthenticationError": "authentication",
+            "ProviderProtocolError": "protocol",
+            "GroundingContractError": "protocol",
+            "ProviderRateLimitError": "rate_limit",
+            "TimeoutError": "timeout",
+            "ProviderUnavailableError": "unavailable",
+        }.get(error_name, "unknown")
+        bounded_count = count if isinstance(count, int) and not isinstance(count, bool) else 1
+        bounded_count = min(max(bounded_count, 1), self.settings.research_max_web_queries)
+        try:
+            self.metrics.external_call_errors_total.increment(
+                amount=bounded_count,
+                labels={
+                    "provider": provider,
+                    "operation": operation,
+                    "error_type": error_type,
+                },
+            )
+        except Exception:
+            return
 
     def clear_session(
         self,

@@ -1,0 +1,55 @@
+groups:
+  - name: rag-studio-service
+    rules:
+      - alert: RAGMetricsTargetDown
+        expr: up{job="rag-studio"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: RAG Studio metrics target is unavailable
+          description: The metrics scrape target has been down for at least two minutes.
+
+      - alert: RAGRequestErrorRateHigh
+        expr: sum(rate(rag_requests_total{outcome="error"}[5m])) / clamp_min(sum(rate(rag_requests_total[5m])), 0.01) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: RAG Studio request error rate is above 5 percent
+          description: Investigate API errors, structured event logs, and recent deployments.
+
+      - alert: RAGAnswerLatencyP95High
+        expr: histogram_quantile(0.95, sum by (le) (rate(rag_request_duration_seconds_bucket{operation=~"answer|research"}[5m]))) > 5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: RAG Studio answer latency p95 exceeds 5 seconds
+          description: Check capacity, model cold starts, provider latency, and workload size.
+
+      - alert: RAGExternalProviderFailuresHigh
+        expr: sum(rate(rag_external_call_errors_total[5m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: RAG Studio external provider failures are elevated
+          description: Inspect provider, operation, and error_type labels without logging request content.
+
+      - alert: RAGIndexBuildFailure
+        expr: increase(rag_index_tasks_total{operation="build",outcome="error"}[15m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: A RAG Studio index build failed
+          description: Inspect the affected job and storage capacity before retrying the import.
+
+      - alert: RAGRateLimitPressure
+        expr: sum(rate(rag_requests_total{outcome="rate_limited"}[5m])) / clamp_min(sum(rate(rag_requests_total[5m])), 0.01) > 0.10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: RAG Studio is rate limiting more than 10 percent of requests
+          description: Confirm abusive traffic is controlled, then review capacity and configured limits.
