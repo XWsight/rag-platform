@@ -56,6 +56,7 @@ class QueryIntentTests(unittest.TestCase):
         questions = (
             "请读取我的银行卡余额。",
             "帮我登录学校网站下载个人课表。",
+            "帮我查询我的本学期成绩单。",
             "替我给导师发送一封邮件。",
             "从我的银行卡向朋友转账一百元。",
             "Book a flight for tomorrow.",
@@ -120,6 +121,33 @@ class QueryIntentTests(unittest.TestCase):
             QueryIntent.UNSUPPORTED_ACTION,
         )
         self.assertNotEqual(unsupported.signal.intent_rule, "")
+
+    def test_sparse_only_evidence_requires_minimum_lexical_support(self) -> None:
+        settings = Settings(routing_min_lexical_score=0.20)
+        policy = RoutingPolicy(settings)
+        chunk = Chunk("chunk", "document", "source.md", "evidence", 0, 0, 8)
+        weak_sparse = SearchHit(
+            chunk,
+            0.95,
+            reasons=("sparse",),
+            lexical_score=0.19,
+        )
+        supported_sparse = SearchHit(
+            chunk,
+            0.95,
+            reasons=("sparse",),
+            lexical_score=0.20,
+        )
+        semantic_agreement = SearchHit(
+            chunk,
+            0.95,
+            reasons=("dense", "sparse"),
+            lexical_score=0.01,
+        )
+
+        self.assertEqual(policy.decide([weak_sparse], allow_web=False).route, Route.REFUSED)
+        self.assertEqual(policy.decide([supported_sparse], allow_web=False).route, Route.LOCAL)
+        self.assertEqual(policy.decide([semantic_agreement], allow_web=False).route, Route.LOCAL)
 
 
 if __name__ == "__main__":

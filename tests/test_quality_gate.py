@@ -34,6 +34,12 @@ class FakeRetriever:
         return (SearchHit(chunk, 0.9, reasons=("dense", "sparse")),)
 
 
+class EmptyRetriever:
+    def search(self, query: str, *, top_k: int):
+        del query, top_k
+        return ()
+
+
 def _run():
     return run_retrieval_benchmark(
         (RetrievalBenchmarkCase("rag", "RAG?", (("rag.md", 3),), Route.LOCAL),),
@@ -56,6 +62,15 @@ def _gate_payload(run) -> dict[str, object]:
     }
 
 
+def _refusal_run():
+    return run_retrieval_benchmark(
+        (RetrievalBenchmarkCase("unknown", "unknown?", (), Route.REFUSED),),
+        EmptyRetriever(),
+        RoutingPolicy(Settings()),
+        clock=iter((1.0, 1.01)).__next__,
+    )
+
+
 class QualityGateTests(unittest.TestCase):
     def test_matching_run_passes_and_renders_machine_readable_result(self) -> None:
         run = _run()
@@ -66,11 +81,23 @@ class QualityGateTests(unittest.TestCase):
         self.assertTrue(json.loads(result.to_json())["passed"])
         self.assertIn("通过", result.to_markdown())
 
+        refusal_run = _refusal_run()
+        refusal_gate = _gate_payload(refusal_run)
+        refusal_gate["minimum_metrics"] = {"refused_route_accuracy": 1.0}
+        self.assertTrue(
+            evaluate_quality_gate(refusal_run, quality_gate_from_mapping(refusal_gate)).passed
+        )
+
         hybrid_gate = load_quality_gate(
             PROJECT_ROOT / "evals" / "gates" / "hybrid-development.json"
         )
         self.assertEqual(hybrid_gate.dataset_digest, "74fe19194ca06876")
         self.assertEqual(dict(hybrid_gate.minimum_metrics)["route_accuracy"], 1.0)
+
+        foundation_gate = load_quality_gate(
+            PROJECT_ROOT / "evals" / "gates" / "hybrid-foundation.json"
+        )
+        self.assertEqual(dict(foundation_gate.minimum_metrics)["refused_route_accuracy"], 0.97)
 
     def test_metric_latency_and_compatibility_regressions_are_explained(self) -> None:
         run = _run()
@@ -91,6 +118,12 @@ class QualityGateTests(unittest.TestCase):
             {"dataset_digest", "top_k", "p95_ms"},
         )
         self.assertIn("maximum milliseconds", result.to_json())
+
+        refusal_payload = _gate_payload(run)
+        refusal_payload["minimum_metrics"] = {"refused_route_accuracy": 0.0}
+        refusal_result = evaluate_quality_gate(run, quality_gate_from_mapping(refusal_payload))
+        self.assertFalse(refusal_result.passed)
+        self.assertEqual(refusal_result.violations[0].actual, "N/A")
 
         citation_payload = _gate_payload(run)
         citation_payload["minimum_metrics"] = {"citation_validity": 0.0}
@@ -166,7 +199,7 @@ class QualityGateTests(unittest.TestCase):
                     encoding="utf-8"
                 )
             )
-            gate["minimum_metrics"]["route_accuracy"] = 0.9
+            gate["minimum_metrics"]["route_accuracy"] = 0.95
             gate_path.write_text(json.dumps(gate), encoding="utf-8")
             failed = subprocess.run(
                 [*command[:-1], str(gate_path), "--json-output", str(report_path)],

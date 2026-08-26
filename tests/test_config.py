@@ -68,6 +68,9 @@ class ConfigurationTests(unittest.TestCase):
         for saturation in (0.04, 1.01, float("inf")):
             with self.subTest(saturation=saturation), self.assertRaises(ValueError):
                 replace(settings, routing_lexical_saturation=saturation).validate()
+        for minimum in (-0.01, 1.01, float("nan")):
+            with self.subTest(minimum=minimum), self.assertRaises(ValueError):
+                replace(settings, routing_min_lexical_score=minimum).validate()
 
 
 if __name__ == "__main__":

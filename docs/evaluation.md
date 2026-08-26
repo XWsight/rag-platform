@@ -120,7 +120,7 @@ manifest 使用严格 JSON、精确字段和显式最低覆盖要求。校验会
 | nDCG@5 | 0.959200740890 |
 | 路由准确率 | 0.944444444444 |
 
-160 个本地问题中有 4 个未完整召回，主要来自跨来源问题和更大语料中的干扰项；查询能力意图层把实时、外部动作和受限请求从证据阈值中分离后，BM25 的路由达到 `0.9444`，仍有 12 个普通无关问题被稀疏分数误判为本地可回答。冻结门禁锁住这个下限是为了防止继续退化，不能把它描述为 Hybrid 或生产质量。
+160 个本地问题中有 4 个未完整召回，主要来自跨来源问题和更大语料中的干扰项；查询能力意图层把实时、外部动作和受限请求从证据阈值中分离后，BM25 的总体路由准确率为 `0.9722`，其中拒答路由准确率为 `0.8611`。本地或混合回答还要求稠密/稀疏一致，或达到最低原始词法匹配，以降低单个稀疏候选偶然词重合造成的无依据回答。冻结门禁分别锁住总体和拒答路由下限，不能把它描述为 Hybrid 或生产质量。
 
 可用 `--split development|validation|test` 单独运行来源隔离分段。分段只索引该 split 的文档，因此适合开发和误差分析；全套运行同时加入其余文档作为干扰项，结果不能与分段数字直接混为一谈。216 个 case 中包含同一家族的语义改写，汇报时必须同时写明“216 questions / 54 semantic families”，不得宣称 216 个独立事实。
 
@@ -147,12 +147,12 @@ python scripts/benchmark_retrieval.py evals/retrieval_cases.jsonl `
 - Git commit、Python/操作系统、`requirements.txt` 和模型缓存版本；
 - `EMBEDDING_MODEL`、`RAG_RERANKER_MODEL` 与 weight；
 - chunk size/overlap、dense/sparse/fused candidates、final evidence count；
-- `RAG_LOCAL_CONFIDENCE`、`RAG_HYBRID_CONFIDENCE_RATIO`、`RAG_ROUTING_LEXICAL_SATURATION` 和 top-k；
+- `RAG_LOCAL_CONFIDENCE`、`RAG_HYBRID_CONFIDENCE_RATIO`、`RAG_ROUTING_LEXICAL_SATURATION`、`RAG_ROUTING_MIN_LEXICAL_SCORE` 和 top-k；
 - ground truth 文件摘要与 corpus 内容摘要。
 
 当前 18 题 Hybrid 开发基线的 Recall@5、MRR@5、nDCG@5 和路由准确率均为 `1.0`，并由 [`hybrid-development.json`](../evals/gates/hybrid-development.json) 冻结。它需要实际加载 Embedding 模型，是发布前手动门禁；默认 CI 只运行不依赖模型下载的 BM25 门禁。该结果来自本地 `BAAI/bge-small-zh-v1.5`、当前依赖与默认配置，不代表独立 blind test、生成质量或生产 SLA。不得引用 BM25 数字作为 Hybrid 成绩，也不得把这 18 题的满分外推为真实业务准确率。
 
-同一环境运行 216 题全语料 Hybrid 得到 Recall@5 `0.984375`、MRR@5 `0.953646`、nDCG@5 `0.953695`、路由准确率 `0.990741`，由 [`hybrid-foundation.json`](../evals/gates/hybrid-foundation.json) 冻结为手动下限。查询能力意图先处理实时、未授权动作和受限请求，只有普通知识问题进入 `0.59` 证据阈值；排序指标仍说明稠密候选和 RRF 并非全面增益。
+同一环境运行 216 题全语料 Hybrid 得到 Recall@5 `0.984375`、MRR@5 `0.953646`、nDCG@5 `0.953695`、总体路由准确率 `0.990741`、拒答路由准确率 `0.972222`，由 [`hybrid-foundation.json`](../evals/gates/hybrid-foundation.json) 冻结为手动下限。查询能力意图先处理实时、未授权动作和受限请求，只有普通知识问题进入 `0.59` 证据阈值；排序指标仍说明稠密候选和 RRF 并非全面增益。
 
 同一默认模型和配置的来源隔离运行中，development 88 题和 validation 68 题的 Recall@5、路由准确率均为 `1.0`。配置冻结后的首次 test 得到 Recall@5 `1.0`、MRR `0.989583`、nDCG `0.992311`、路由 `0.916667`，其中医疗诊断和密钥提取请求暴露能力边界缺失。修复后该公开 test 已被消费，只能作为回归集；后续可信泛化结论需要新的、未参与开发且最好由独立标注者维护的外部盲测集。
 

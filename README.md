@@ -190,7 +190,7 @@ python scripts\benchmark_sparse.py evals\retrieval_suite.json `
   --markdown-output reports\bm25-foundation.md
 ```
 
-当前 suite/corpus bundle 摘要为 `e75fb276b6a2a227`，题目 ground truth 摘要为 `2f40b11e574096d0`。全语料 BM25 下限为 Recall@5 `0.9844`、MRR@5 `0.9568`、nDCG@5 `0.9592`、路由准确率 `0.9444`。`--split development|validation|test` 可以只运行一个来源隔离分段；同义问法用于鲁棒性覆盖，因此 216 题应同时报告为 54 个独立语义家族，不能包装成 216 个独立知识点。
+当前 suite/corpus bundle 摘要为 `e75fb276b6a2a227`，题目 ground truth 摘要为 `2f40b11e574096d0`。全语料 BM25 下限为 Recall@5 `0.9844`、MRR@5 `0.9568`、nDCG@5 `0.9592`、总体路由准确率 `0.9722`、拒答路由准确率 `0.8611`。`--split development|validation|test` 可以只运行一个来源隔离分段；同义问法用于鲁棒性覆盖，因此 216 题应同时报告为 54 个独立语义家族，不能包装成 216 个独立知识点。
 
 受治理的检索运行会额外输出期望/实际路由混淆矩阵，以及 split、category、difficulty、expected route 四个维度的质量切片。每条预测还包含不含问题或文档正文的路由信号：首名/次名分数、分差、稠密与稀疏排名一致性、词法支撑度和最终置信度。这些信号用于定位阈值与特征问题，不得记录检索正文，也不能通过只展示高分切片掩盖失败。
 
@@ -206,7 +206,7 @@ python scripts\benchmark_retrieval.py evals\retrieval_cases.jsonl `
 
 在当前本地模型标识与默认配置下，当前 18 题 Hybrid 开发基线的 Recall@5、MRR@5、nDCG@5 和路由准确率均为 `1.0000`。该门禁需要下载并运行 Embedding 模型，因此是发布前手动门禁，不在默认 CI 中执行。该集合专门加入了语义改写、本地越界和必须联网的对抗题，仍然只是开发回归证据，不是生产质量或真实业务泛化证明。
 
-216 题套件的真实 Hybrid 全语料基线为 Recall@5 `0.9844`、MRR@5 `0.9536`、nDCG@5 `0.9537`、路由准确率 `0.9907`，冻结在 `evals/gates/hybrid-foundation.json`。查询能力意图与证据置信度已经分层：实时信息、未授权外部动作和受限请求先经过确定性能力边界，普通知识问题才使用校准到 `0.59` 的检索置信度。该门禁只手动运行，不因结果较大就替代 18 题秒级回归。
+216 题套件的真实 Hybrid 全语料基线为 Recall@5 `0.9844`、MRR@5 `0.9536`、nDCG@5 `0.9537`、总体路由准确率 `0.9907`、拒答路由准确率 `0.9722`，冻结在 `evals/gates/hybrid-foundation.json`。查询能力意图与证据置信度已经分层：实时信息、未授权外部动作和受限请求先经过确定性能力边界，普通知识问题才使用校准到 `0.59` 的检索置信度。该门禁只手动运行，不因结果较大就替代 18 题秒级回归。
 
 按来源隔离的本地实测中，development 88 题为 Recall@5 `1.0000`、MRR@5 `0.9818`、nDCG@5 `0.9766`、路由 `1.0000`；validation 68 题为 `1.0000`、`0.9792`、`0.9812`、`1.0000`。首次冻结后的 test 得到 Recall@5 `1.0000`、MRR@5 `0.9896`、nDCG@5 `0.9923`、路由 `0.9167`，暴露医疗诊断和密钥提取能力边界后，该公开 test 已被消费并降级为回归集；后续改进不得继续把它称为无偏盲测。
 

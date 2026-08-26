@@ -98,6 +98,8 @@ class RuleBasedQueryIntentClassifier:
         "医保账户",
         "教务系统",
         "学校网站",
+        "成绩单",
+        "学期成绩",
         "身份证",
         "邮箱",
         "网盘",
@@ -341,7 +343,8 @@ class RoutingPolicy:
                 ),
                 signal,
             )
-        if confidence >= self.settings.local_confidence_threshold:
+        evidence_supported = self._evidence_supported(signal)
+        if confidence >= self.settings.local_confidence_threshold and evidence_supported:
             return RoutingAssessment(
                 RouteDecision(Route.LOCAL, confidence, "本地证据达到置信度阈值。"),
                 signal,
@@ -349,7 +352,7 @@ class RoutingPolicy:
         hybrid_threshold = (
             self.settings.local_confidence_threshold * self.settings.hybrid_confidence_ratio
         )
-        if allow_web and confidence >= hybrid_threshold:
+        if allow_web and confidence >= hybrid_threshold and evidence_supported:
             return RoutingAssessment(
                 RouteDecision(Route.HYBRID, confidence, "本地证据不完整，将补充网络来源。"),
                 signal,
@@ -362,6 +365,20 @@ class RoutingPolicy:
         return RoutingAssessment(
             RouteDecision(Route.REFUSED, confidence, "本地证据不足且联网搜索未开启。"),
             signal,
+        )
+
+    def _evidence_supported(self, signal: RoutingSignal) -> bool:
+        """Require either cross-ranker agreement or meaningful lexical coverage.
+
+        Dense and sparse agreement preserves semantic matches that use different
+        wording.  When only a sparse candidate is available, a minimum query
+        coverage prevents incidental token overlap from being treated as enough
+        evidence to answer locally.
+        """
+
+        return (
+            signal.ranker_agreement
+            or signal.lexical_score >= self.settings.routing_min_lexical_score
         )
 
     def confidence(self, hits: Sequence[SearchHit]) -> float:

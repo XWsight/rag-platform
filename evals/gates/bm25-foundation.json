@@ -6,7 +6,8 @@
     "mrr_at_k": 0.956,
     "ndcg_at_k": 0.959,
     "recall_at_k": 0.984,
-    "route_accuracy": 0.94
+    "route_accuracy": 0.97,
+    "refused_route_accuracy": 0.86
   },
   "maximum_latency_ms": {}
 }

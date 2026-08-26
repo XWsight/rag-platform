@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from rag_system.benchmark import RetrievalBenchmarkRun
+from rag_system.domain import Route
 from rag_system.evaluation import DatasetValidationError
 
 
@@ -30,6 +31,7 @@ _METRIC_NAMES = frozenset(
         "mrr_at_k",
         "ndcg_at_k",
         "route_accuracy",
+        "refused_route_accuracy",
         "citation_validity",
         "citation_coverage",
     }
@@ -191,7 +193,18 @@ def evaluate_quality_gate(
         if name in {"citation_validity", "citation_coverage"} and not report.citation_case_count:
             violations.append(QualityViolation(name, "minimum", minimum, "N/A"))
             continue
-        actual = metrics[name]
+        if name == "refused_route_accuracy":
+            refused = tuple(
+                prediction
+                for prediction in run.predictions
+                if prediction.expected_route is Route.REFUSED
+            )
+            if not refused:
+                violations.append(QualityViolation(name, "minimum", minimum, "N/A"))
+                continue
+            actual = sum(prediction.route_correct for prediction in refused) / len(refused)
+        else:
+            actual = metrics[name]
         if actual < minimum:
             violations.append(QualityViolation(name, "minimum", minimum, actual))
 
