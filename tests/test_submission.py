@@ -82,6 +82,25 @@ class UploadBatchPreparerTests(unittest.TestCase):
         with self.assertRaises(PlatformUnavailableError):
             invalid.new_document_id()
 
+    def test_document_identifier_generator_fails_closed(self) -> None:
+        raising = UploadBatchPreparer(
+            max_file_bytes=1,
+            max_total_bytes=1,
+            max_documents=1,
+            document_id_factory=lambda: (_ for _ in ()).throw(RuntimeError("unavailable")),
+        )
+        non_ascii = UploadBatchPreparer(
+            max_file_bytes=1,
+            max_total_bytes=1,
+            max_documents=1,
+            document_id_factory=lambda: "汉" * 16,
+        )
+
+        with self.assertRaises(PlatformUnavailableError):
+            raising.new_document_id()
+        with self.assertRaises(PlatformUnavailableError):
+            non_ascii.new_document_id()
+
 
 if __name__ == "__main__":
     unittest.main()

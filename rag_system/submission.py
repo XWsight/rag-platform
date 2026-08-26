@@ -59,11 +59,14 @@ class UploadBatchPreparer:
         return tuple(materialized)
 
     def new_document_id(self) -> str:
-        value = self._document_id_factory()
+        try:
+            value = self._document_id_factory()
+        except Exception:
+            raise PlatformUnavailableError("document identifier generation failed") from None
         if not isinstance(value, str):
             raise PlatformUnavailableError("document identifier generation failed")
         normalized = value.replace("-", "")
-        if len(normalized) < 16 or not normalized.isalnum():
+        if len(normalized) < 16 or not normalized.isascii() or not normalized.isalnum():
             raise PlatformUnavailableError("document identifier generation failed")
         return f"doc_{normalized[:48]}"
 

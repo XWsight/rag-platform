@@ -20,6 +20,14 @@ class PlannedDocument:
     manifest: DocumentManifest
 
 
+class AssetStoreFailure(RuntimeError):
+    """Report which planned documents were committed before a store failure."""
+
+    def __init__(self, stored_documents: Sequence[PlannedDocument]) -> None:
+        self.stored_documents = tuple(stored_documents)
+        super().__init__("document assets could not be stored")
+
+
 class KnowledgeBaseAssets:
     """Own the consistency boundary between catalog manifests and stored files."""
 
@@ -56,21 +64,26 @@ class KnowledgeBaseAssets:
         return tuple(planned)
 
     def store(self, principal: Principal, documents: Sequence[PlannedDocument]) -> None:
-        for planned in documents:
-            saved = self._file_store.save(
-                principal.tenant_id.value,
-                planned.resource_id,
-                planned.upload.display_name,
-                planned.upload.source,
-            )
-            manifest = planned.manifest
-            if (
-                saved.display_name != manifest.display_name
-                or saved.relative_path != manifest.relative_path
-                or saved.size != manifest.size_bytes
-                or saved.sha256 != manifest.sha256
-            ):
-                raise PlatformIntegrityError("stored document does not match its manifest")
+        stored: list[PlannedDocument] = []
+        try:
+            for planned in documents:
+                saved = self._file_store.save(
+                    principal.tenant_id.value,
+                    planned.resource_id,
+                    planned.upload.display_name,
+                    planned.upload.source,
+                )
+                stored.append(planned)
+                manifest = planned.manifest
+                if (
+                    saved.display_name != manifest.display_name
+                    or saved.relative_path != manifest.relative_path
+                    or saved.size != manifest.size_bytes
+                    or saved.sha256 != manifest.sha256
+                ):
+                    raise PlatformIntegrityError("stored document does not match its manifest")
+        except Exception as exc:
+            raise AssetStoreFailure(stored) from exc
 
     def resolve(
         self,
@@ -124,4 +137,4 @@ class KnowledgeBaseAssets:
         return size, digest.hexdigest()
 
 
-__all__ = ["KnowledgeBaseAssets", "PlannedDocument"]
+__all__ = ["AssetStoreFailure", "KnowledgeBaseAssets", "PlannedDocument"]

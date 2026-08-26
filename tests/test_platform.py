@@ -24,7 +24,7 @@ from rag_system.domain import (
     Route,
     RouteDecision,
 )
-from rag_system.file_store import FileStoreIOError, TenantFileStore
+from rag_system.file_store import DuplicateResourceError, FileStoreIOError, TenantFileStore
 from rag_system.ingestion import IngestionResult
 from rag_system.idempotency import IdempotencyStore
 from rag_system.idempotency import IdempotencyConflictError
@@ -288,6 +288,53 @@ class PlatformTests(unittest.TestCase):
             self._wait_for_job(retried.job_id.value).status,
             JobStatus.SUCCEEDED,
         )
+
+    def test_document_id_collision_does_not_delete_existing_document(self) -> None:
+        collision_root = self.root / "collision"
+        collision_jobs = JobManager(max_workers=2, max_jobs=16, ttl_seconds=30)
+        self.addCleanup(collision_jobs.shutdown)
+        platform = RagPlatform(
+            settings=self.settings,
+            service=FakeService(),
+            catalog=KnowledgeBaseCatalog(collision_root / "catalog.sqlite3"),
+            file_store=TenantFileStore(
+                collision_root / "documents",
+                max_file_bytes=10_000,
+                max_total_bytes=50_000,
+                max_files_per_tenant=20,
+            ),
+            jobs=collision_jobs,
+            idempotency=IdempotencyStore(collision_root / "idempotency.sqlite3"),
+            document_id_factory=lambda: "a" * 32,
+        )
+        first = platform.create_knowledge_base(
+            self.tenant_a,
+            display_name="First upload",
+            documents=(UploadDocument("first.txt", b"first evidence"),),
+            idempotency_key="first-collision-upload",
+        )
+        self.assertEqual(
+            self._wait_for_job_on(platform, first.job_id.value).status,
+            JobStatus.SUCCEEDED,
+        )
+
+        with self.assertRaises(DuplicateResourceError):
+            platform.create_knowledge_base(
+                self.tenant_a,
+                display_name="Second upload",
+                documents=(UploadDocument("second.txt", b"second evidence"),),
+                idempotency_key="second-collision-upload",
+            )
+
+        original = platform.get_knowledge_base(
+            self.tenant_a,
+            first.knowledge_base.resource_id,
+        )
+        self.assertEqual(original.status, KnowledgeBaseStatus.READY)
+        resolved = platform._assets.resolve(self.tenant_a, original)
+        self.assertEqual(len(resolved), 1)
+        self.assertEqual(resolved[0].name, "first.txt")
+        self.assertEqual(resolved[0].read_bytes(), b"first evidence")
 
     def test_create_answer_session_isolation_and_delete(self) -> None:
         record = self._create_ready()

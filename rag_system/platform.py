@@ -26,7 +26,7 @@ from rag_system.application_ports import (
     KnowledgeBaseRepository,
     KnowledgeService,
 )
-from rag_system.assets import KnowledgeBaseAssets
+from rag_system.assets import AssetStoreFailure, KnowledgeBaseAssets
 from rag_system.catalog import (
     KnowledgeBaseErrorCode,
     KnowledgeBaseRecord,
@@ -196,6 +196,7 @@ class RagPlatform:
 
         created_record: KnowledgeBaseRecord | None = None
         job_id: JobId | None = None
+        stored_document_ids: frozenset[str] | None = None
         try:
             created_record = self.catalog.create(
                 principal,
@@ -212,7 +213,17 @@ class RagPlatform:
                 created_record.resource_id,
                 tuple(item.manifest for item in planned),
             )
-            self._assets.store(principal, planned)
+            try:
+                self._assets.store(principal, planned)
+            except AssetStoreFailure as failure:
+                stored_document_ids = frozenset(
+                    document.resource_id for document in failure.stored_documents
+                )
+                if failure.__cause__ is None:
+                    raise PlatformUnavailableError(
+                        "document assets could not be stored"
+                    ) from failure
+                raise failure.__cause__ from None
             created_record = self.catalog.transition(
                 principal,
                 created_record.resource_id,
@@ -236,6 +247,7 @@ class RagPlatform:
                     cleanup_complete = self._rollback_create(
                         principal,
                         created_record,
+                        stored_document_ids=stored_document_ids,
                     )
                 else:
                     try:
@@ -609,6 +621,8 @@ class RagPlatform:
         self,
         principal: Principal,
         record: KnowledgeBaseRecord,
+        *,
+        stored_document_ids: frozenset[str] | None = None,
     ) -> bool:
         try:
             current = self.catalog.get(principal, record.resource_id)
@@ -624,6 +638,8 @@ class RagPlatform:
         cleanup_succeeded = True
         for document in current.documents:
             document_id = self._assets.document_resource_id(principal, document)
+            if stored_document_ids is not None and document_id not in stored_document_ids:
+                continue
             try:
                 self.file_store.delete(principal.tenant_id.value, document_id)
             except FileStoreError:
