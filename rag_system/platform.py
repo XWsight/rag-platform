@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import threading
 import uuid
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import replace
 from typing import Any
 
@@ -511,15 +511,7 @@ class RagPlatform:
             if tenant in seen_tenants:
                 continue
             seen_tenants.add(tenant)
-            tenant_records: list[KnowledgeBaseRecord] = []
-            offset = 0
-            while True:
-                records = self.catalog.list(principal, limit=100, offset=offset)
-                tenant_records.extend(records)
-                if len(records) < 100:
-                    break
-                offset += len(records)
-            for record in tenant_records:
+            for record in self._recovery_records(principal):
                 if record.status is KnowledgeBaseStatus.DELETING:
                     self.delete_knowledge_base(principal, record.resource_id)
                     self._abandon_reservation_if_unbound(principal, record)
@@ -547,6 +539,22 @@ class RagPlatform:
                     self._recover_idempotency_binding(principal, record, job_id)
                     recovered += 1
         return recovered
+
+    def _recovery_records(self, principal: Principal) -> Iterator[KnowledgeBaseRecord]:
+        """Scan a tenant catalog through stable keyset pages for recovery."""
+
+        records = self.catalog.list(principal, limit=100, offset=0)
+        while records:
+            yield from records
+            if len(records) < 100:
+                return
+            anchor = records[-1]
+            records = self.catalog.list_after(
+                principal,
+                updated_at=anchor.updated_at,
+                resource_id=anchor.resource_id,
+                limit=100,
+            )
 
     def _submit_status_job(
         self,

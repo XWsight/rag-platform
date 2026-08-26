@@ -247,6 +247,20 @@ class PlatformTests(unittest.TestCase):
             JobStatus.SUCCEEDED,
         )
 
+    def test_recovery_scans_every_catalog_page_with_keyset_pagination(self) -> None:
+        for index in range(101):
+            self.platform.catalog.create(self.tenant_a, f"Interrupted {index}")
+
+        with patch.object(
+            self.platform.catalog,
+            "list_after",
+            wraps=self.platform.catalog.list_after,
+        ) as list_after:
+            self.assertEqual(self.platform.recover_incomplete((self.tenant_a,)), 101)
+
+        self.assertGreaterEqual(list_after.call_count, 1)
+        self.assertEqual(self.platform.catalog.list(self.tenant_a, limit=100), ())
+
     def test_failed_preparing_cleanup_keeps_idempotency_until_retry_converges(self) -> None:
         documents = (
             UploadDocument("first.txt", b"first evidence"),

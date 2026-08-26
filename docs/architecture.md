@@ -124,7 +124,7 @@ Catalog 的 `CANCELLING` 与 job 的 `cancelling` 含义不同：前者是 schem
 4. 本地向量清单若恰好包含预期 chunk ID 集合、匹配模型标识且向量维度有效则直接复用；缺失或不匹配时从原文重建。
 5. 对 `PENDING`/`INDEXING` 的取消必须先耐久提交 Catalog `CANCELLING`，再向 worker 发信号。任务只在显式检查点响应取消，正在执行的第三方库调用不保证立即中断；`READY` 提交后到达的取消不会回滚知识库。
 
-文件系统、SQLite 和本地向量文件之间没有跨资源 ACID 事务。实现通过显式 `PREPARING`、不可变清单、内容校验、原子索引替换、可重试删除和失败补偿降低不一致概率；启动恢复会验证并继续完整的 `PREPARING`、精确回滚部分上传、清理 `DELETING`、把 `CANCELLING` 终态化为 `FAILED`/`index_cancelled`、重新提交 `PENDING`/`INDEXING`，并用持久 reservation 修复资源与新进程任务的绑定。运维仍需监控长期停留状态并使用一致性备份。
+文件系统、SQLite 和本地向量文件之间没有跨资源 ACID 事务。实现通过显式 `PREPARING`、不可变清单、内容校验、原子索引替换、可重试删除和失败补偿降低不一致概率；启动恢复会以稳定 keyset 分页扫描全部已知租户资源，验证并继续完整的 `PREPARING`、精确回滚部分上传、清理 `DELETING`、把 `CANCELLING` 终态化为 `FAILED`/`index_cancelled`、重新提交 `PENDING`/`INDEXING`，并用持久 reservation 修复资源与新进程任务的绑定。运维仍需监控长期停留状态并使用一致性备份。
 
 ## 同步问答数据流
 
