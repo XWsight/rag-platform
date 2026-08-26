@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import Mock
 import subprocess
 import tempfile
 import unittest
@@ -124,15 +125,31 @@ class DependencyAuditPolicyTests(unittest.TestCase):
             self.assertTrue(any("unapproved vulnerability" in error for error in errors))
             self.assertTrue(any("stale dependency exception" in error for error in errors))
 
-    def test_network_timeout_fails_the_audit_without_hanging(self) -> None:
+    def test_network_timeout_terminates_the_isolated_auditor_process_tree(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             policy, requirements = self._write_fixture(directory)
             exceptions = load_policy(policy, requirements, today=date(2026, 8, 11))
+            process = Mock()
+            process.pid = 4242
+            process.communicate.side_effect = [
+                subprocess.TimeoutExpired(("pip-audit",), 45),
+                ("", ""),
+            ]
+            process.returncode = -9
             with patch(
-                "scripts.audit_dependencies.subprocess.run",
-                side_effect=subprocess.TimeoutExpired(("pip-audit",), 45),
-            ):
+                "scripts.audit_dependencies._start_audit_process", return_value=process
+            ), patch("scripts.audit_dependencies.os.name", "nt"), patch(
+                "scripts.audit_dependencies.subprocess.run"
+            ) as terminate:
                 self.assertEqual(run_audit(requirements, exceptions), 2)
+            terminate.assert_called_once_with(
+                ("taskkill", "/PID", "4242", "/T", "/F"),
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=10,
+            )
+            self.assertEqual(process.communicate.call_count, 2)
 
 
 if __name__ == "__main__":

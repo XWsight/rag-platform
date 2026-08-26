@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import signal
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -325,29 +327,28 @@ def run_audit(
     requirements_path: Path,
     exceptions: tuple[DependencyException, ...],
 ) -> int:
+    process = _start_audit_process(requirements_path)
     try:
-        completed = subprocess.run(
-            build_command(requirements_path),
-            cwd=PROJECT_ROOT,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=_AUDIT_TIMEOUT_SECONDS,
-        )
+        stdout, stderr = process.communicate(timeout=_AUDIT_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
+        _terminate_process_tree(process)
+        # Draining the pipes after termination prevents a zombie process on
+        # every supported platform. Do not rely on Popen.kill() alone here:
+        # pip-audit may create an isolated Python and pip child process.
+        stdout, stderr = process.communicate()
         print(
             f"dependency audit timed out after {_AUDIT_TIMEOUT_SECONDS} seconds",
             file=sys.stderr,
         )
         return 2
-    if completed.returncode not in {0, 1}:
-        if completed.stdout:
-            print(completed.stdout, file=sys.stderr, end="")
-        if completed.stderr:
-            print(completed.stderr, file=sys.stderr, end="")
-        return completed.returncode or 2
+    if process.returncode not in {0, 1}:
+        if stdout:
+            print(stdout, file=sys.stderr, end="")
+        if stderr:
+            print(stderr, file=sys.stderr, end="")
+        return process.returncode or 2
     try:
-        findings = parse_report(completed.stdout)
+        findings = parse_report(stdout)
     except AuditPolicyError as error:
         print(f"dependency audit report rejected: {error}", file=sys.stderr)
         return 2
@@ -360,6 +361,50 @@ def run_audit(
         "no unapproved vulnerabilities"
     )
     return 0
+
+
+def _start_audit_process(requirements_path: Path) -> subprocess.Popen[str]:
+    """Start pip-audit in an independently terminable process group."""
+
+    arguments: dict[str, Any] = {
+        "cwd": PROJECT_ROOT,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "text": True,
+    }
+    if os.name == "nt":
+        arguments["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        arguments["start_new_session"] = True
+    return subprocess.Popen(build_command(requirements_path), **arguments)
+
+
+def _terminate_process_tree(process: subprocess.Popen[str]) -> None:
+    """Terminate the auditor and any isolated-environment children it owns."""
+
+    if os.name == "nt":
+        try:
+            subprocess.run(
+                ("taskkill", "/PID", str(process.pid), "/T", "/F"),
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=10,
+            )
+            return
+        except (OSError, subprocess.SubprocessError):
+            # Fall through to the direct process when taskkill is unavailable.
+            pass
+    else:
+        try:
+            kill_group = getattr(os, "killpg", None)
+            kill_signal = getattr(signal, "SIGKILL", None)
+            if callable(kill_group) and isinstance(kill_signal, int):
+                kill_group(process.pid, kill_signal)
+                return
+        except (OSError, ProcessLookupError):
+            pass
+    process.kill()
 
 
 def main(argv: list[str] | None = None) -> int:
