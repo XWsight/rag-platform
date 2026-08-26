@@ -22,7 +22,7 @@ _ROUTE_LABELS = {
 }
 
 
-def create_demo(service: RagService, settings: Settings):
+def create_demo(service: RagService, settings: Settings) -> Any:
     try:
         import gradio as gr
     except ImportError as error:

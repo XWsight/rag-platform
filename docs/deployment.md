@@ -98,8 +98,10 @@ docker image inspect rag-studio:2026.08.11-1 --format '{{json .RepoDigests}}'
 
 推送与稳定 `pyproject.toml` 版本完全一致的 `v<version>` Git tag 后，`release` workflow 会附上 SPDX
 SBOM 与 release manifest 并创建 GitHub Release。当前开发版本带 `.dev`，因此会被工作流拒绝，避免把开发
-快照误标为正式发行。此流程不伪造镜像签名；选定 GHCR 或其他仓库、并配置 OIDC/KMS 或可信签名身份后，
-再把签名和 provenance attestation 作为独立发布门禁加入。
+快照误标为正式发行。稳定 tag 会把镜像推送至 `ghcr.io/<owner>/rag-system`，生成 BuildKit provenance/SBOM，
+并提交 GitHub build provenance attestation；部署时必须记录和固定该镜像 digest，不能只引用可变 tag。
+首次发布前需在仓库 Settings 中确认 GitHub Actions 具有 Packages 写入权限，并按组织策略将 GHCR 包设为
+公开或授权给目标运行环境。该证明只覆盖 GitHub Actions 构建链路，不替代运行时密钥管理、发布审批或离机备份。
 
 ## 反向代理
 

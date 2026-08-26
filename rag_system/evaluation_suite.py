@@ -17,7 +17,7 @@ from rag_system.json_contract import JsonContractError, decode_json_object
 _IDENTIFIER = re.compile(r"[a-z][a-z0-9_]{2,63}\Z")
 
 
-class EvaluationSuiteError(DatasetValidationError):  # type: ignore[misc]
+class EvaluationSuiteError(DatasetValidationError):
     """Raised when a suite manifest or frozen contract is ambiguous."""
 
 

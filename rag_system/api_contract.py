@@ -30,7 +30,7 @@ CitationId = Annotated[
 ]
 
 
-class StrictModel(BaseModel):
+class StrictModel(BaseModel):  # type: ignore[misc]
     """Forbid unknown input fields and implicit type coercion."""
 
     model_config = ConfigDict(extra="forbid", strict=True, str_strip_whitespace=True)

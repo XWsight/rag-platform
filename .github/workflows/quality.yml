@@ -94,6 +94,16 @@ jobs:
           python -m pip check
           python -c "import httpx; assert httpx.__version__ == '0.28.1'"
 
+  browser-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      - name: Verify same-origin browser API and safe rendering contract
+        run: node --test tests/web_ui_contract.test.mjs
+
   dependency-audit:
     runs-on: ubuntu-latest
     steps:

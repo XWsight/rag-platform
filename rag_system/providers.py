@@ -7,7 +7,7 @@ import re
 import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 import requests
 
@@ -124,7 +124,7 @@ class _ZhipuHTTPClient:
                 raise ProviderUnavailableError("云端服务连接池已关闭。")
             if self._provided_session is not None:
                 return self._provided_session
-            session = getattr(self._thread_local, "session", None)
+            session = cast(_SessionLike | None, getattr(self._thread_local, "session", None))
             if session is None:
                 session = requests.Session()
                 self._thread_local.session = session
@@ -185,11 +185,11 @@ class _ZhipuHTTPClient:
             raise ProviderProtocolError("云端服务返回了无法解析的数据。") from None
         if not isinstance(data, dict):
             raise ProviderProtocolError("云端服务返回的数据结构不正确。")
-        return data
+        return cast(dict[str, Any], data)
 
     @staticmethod
     def _retry_delay(attempt: int, response: _ResponseLike | None) -> float:
-        delay = min(0.25 * (2**attempt), 2.0)
+        delay: float = min(0.25 * (2**attempt), 2.0)
         if response is None or response.status_code != 429:
             return delay
         raw_retry_after = response.headers.get("Retry-After", "")
@@ -199,7 +199,7 @@ class _ZhipuHTTPClient:
             return delay
         if retry_after < 0:
             return delay
-        return max(delay, min(retry_after, 2.0))
+        return float(max(delay, min(retry_after, 2.0)))
 
 
 class ZhipuChatModel(_ZhipuHTTPClient):

@@ -50,48 +50,7 @@ strict = true
 follow_imports = "skip"
 show_error_codes = true
 files = [
-  "rag_system/application.py",
-  "rag_system/application_ports.py",
-  "rag_system/answer_analysis.py",
-  "rag_system/answer_benchmark.py",
-  "rag_system/answer_suite.py",
-  "rag_system/answer_workflow.py",
-  "rag_system/assets.py",
-  "rag_system/benchmark_suite.py",
-  "rag_system/bootstrap.py",
-  "rag_system/catalog.py",
-  "rag_system/config.py",
-  "rag_system/coordination.py",
-  "rag_system/domain.py",
-  "rag_system/evaluation_suite.py",
-  "rag_system/file_store.py",
-  "rag_system/health.py",
-  "rag_system/idempotency.py",
-  "rag_system/index_manager.py",
-  "rag_system/indexing.py",
-  "rag_system/ingestion.py",
-  "rag_system/jobs.py",
-  "rag_system/job_contracts.py",
-  "rag_system/job_store.py",
-  "rag_system/knowledge_base_contracts.py",
-  "rag_system/knowledge_base_lifecycle.py",
-  "rag_system/loaders.py",
-  "rag_system/memory.py",
-  "rag_system/metrics.py",
-  "rag_system/platform.py",
-  "rag_system/ports.py",
-  "rag_system/provenance.py",
-  "rag_system/provider_factory.py",
-  "rag_system/research.py",
-  "rag_system/retrieval.py",
-  "rag_system/retrieval_analysis.py",
-  "rag_system/retrieval_experiments.py",
-  "rag_system/runtime_profile.py",
-  "rag_system/routing.py",
-  "rag_system/security.py",
-  "rag_system/service.py",
-  "rag_system/submission.py",
-  "rag_system/tenancy.py",
+  "rag_system",
 ]
 
 [[tool.mypy.overrides]]
@@ -101,6 +60,12 @@ module = [
   "pypdf",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["rag_system.api", "rag_system.web_ui"]
+# FastAPI route decorators are dynamically typed. Keep strict checking of
+# function bodies while suppressing this third-party decorator limitation.
+disable_error_code = ["untyped-decorator"]
 
 [tool.coverage.run]
 branch = true

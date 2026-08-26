@@ -11,7 +11,7 @@ import math
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
-from numbers import Real
+from typing import SupportsFloat
 
 from rag_system.text import lexical_tokens, normalize_text, stable_digest
 
@@ -207,10 +207,13 @@ class BM25Index:
         return tuple(scored[:top_k])
 
 
-def _finite_number(name: str, value: Real) -> float:
-    if isinstance(value, bool) or not isinstance(value, Real):
+def _finite_number(name: str, value: SupportsFloat) -> float:
+    if isinstance(value, (bool, str, bytes)):
         raise TypeError(f"{name} must be a real number")
-    resolved = float(value)
+    try:
+        resolved = float(value)
+    except (TypeError, ValueError):
+        raise TypeError(f"{name} must be a real number") from None
     if not math.isfinite(resolved):
         raise ValueError(f"{name} must be finite")
     return resolved

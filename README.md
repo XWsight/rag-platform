@@ -81,6 +81,8 @@ Embedding、持久化、BM25、重排序、网络与并发。因此它用于判�
 JSON 报告会同时记录基准参数、Python/平台、可见 CPU 数、源码提交和工作区是否干净；比较不同机器或
 不同版本的数值前必须先核对这些字段。用于正式比较的报告应使用 `--require-clean`，且仍不能将该微基准解释为端到端 SLA。
 
+派生项目如需替换为 ANN 或托管向量库，应在组合根注入既有 `IndexRepository` 契约，而不是修改 API 或把供应商 SDK 扩散到业务层；约束与验收清单见[向量后端扩展契约](docs/vector-backend.md)。
+
 首次可复核的本机边界测量及其环境、命令和限制见
 [本地精确索引规模记录](docs/performance/local-vector-index-boundary-2026-08-26.md)。
 

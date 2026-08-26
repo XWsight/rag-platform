@@ -7,9 +7,9 @@ import logging
 import math
 import re
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import asynccontextmanager
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
 from fastapi import Depends, FastAPI, File, Form, Header, Path, Query, Request, Security, UploadFile
 from fastapi.exceptions import RequestValidationError
@@ -19,6 +19,8 @@ from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBea
 from pydantic import Field
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.types import Message
 
 from rag_system.api_contract import (
     RESOURCE_PATTERN as _RESOURCE_PATTERN,
@@ -99,7 +101,7 @@ def create_app(
         )
 
     @asynccontextmanager
-    async def lifespan(_: FastAPI):
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         yield
         if close_on_shutdown:
             await run_in_threadpool(shutdown or platform.close)
@@ -130,7 +132,7 @@ def create_app(
         """
 
         if app.openapi_schema is not None:
-            return app.openapi_schema
+            return cast(dict[str, Any], app.openapi_schema)
         schema = get_openapi(
             title=app.title,
             version=app.version,
@@ -153,7 +155,7 @@ def create_app(
             "description": "Documents to index",
         }
         app.openapi_schema = schema
-        return schema
+        return cast(dict[str, Any], schema)
 
     app.openapi = custom_openapi
 
@@ -171,7 +173,9 @@ def create_app(
     )
 
     @app.middleware("http")
-    async def request_context(request: Request, call_next):
+    async def request_context(
+        request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         started = time.perf_counter()
         context = _request_context(request)
         request.state.trace_context = context
@@ -323,7 +327,7 @@ def create_app(
         ).hexdigest()[:16]
         return principal
 
-    def require_role(role: Literal["reader", "writer", "operator"]):
+    def require_role(role: Literal["reader", "writer", "operator"]) -> Callable[..., object]:
         async def dependency(
             principal: Annotated[Principal, Depends(authenticate)],
         ) -> Principal:
@@ -684,7 +688,7 @@ def _install_receive_limit(request: Request, body_limit: int) -> None:
     original_receive = request._receive
     received = 0
 
-    async def limited_receive():
+    async def limited_receive() -> Message:
         nonlocal received
         message = await original_receive()
         if message.get("type") == "http.request":

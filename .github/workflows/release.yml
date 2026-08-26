@@ -7,6 +7,9 @@ on:
 
 permissions:
   contents: write
+  packages: write
+  attestations: write
+  id-token: write
 
 jobs:
   publish-release-evidence:
@@ -33,6 +36,32 @@ jobs:
           python scripts/release_manifest.py
           --require-clean
           --json-output reports/release-manifest.json
+      - name: Prepare OCI image metadata
+        id: image
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ github.ref_name }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ github.ref_name }}
+            type=raw,value=latest
+      - name: Build and publish immutable container image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.image.outputs.tags }}
+          labels: ${{ steps.image.outputs.labels }}
+          build-args: VCS_REF=${{ github.sha }}
+          provenance: mode=max
+          sbom: true
+      - name: Attest published image provenance
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
       - name: Create GitHub release with review artifacts
         env:
           GH_TOKEN: ${{ github.token }}

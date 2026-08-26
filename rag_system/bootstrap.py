@@ -37,6 +37,7 @@ from rag_system.retrieval import LocalVectorIndexRepository
 from rag_system.runtime_profile import RuntimeComponents, RuntimeProfile
 from rag_system.service import RagService
 from rag_system.tenancy import ApiKeyAuthenticator, Principal, TenantId
+from rag_system.ports import IndexRepository
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,11 +229,17 @@ def build_service_from_settings(
     settings: Settings,
     *,
     provider_factory: ProviderFactory | None = None,
+    index_repository: IndexRepository | None = None,
 ) -> RagService:
-    """Assemble a service with the default or an explicitly injected provider factory."""
+    """Assemble a service with explicit provider and vector-backend boundaries.
+
+    The local exact-scan repository remains the safe default. Derived projects
+    may inject a conforming repository from their composition root, keeping
+    vendor SDKs and connection policy outside the reusable base package.
+    """
 
     validated = settings.validate()
-    repository = LocalVectorIndexRepository(validated)
+    repository = index_repository or LocalVectorIndexRepository(validated)
     manager = IndexManager(validated, repository)
     factory = provider_factory or ZhipuProviderFactory()
     providers = create_provider_bundle(factory, validated)

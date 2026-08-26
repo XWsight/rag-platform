@@ -330,7 +330,9 @@ def _ndcg(retrieved: Sequence[str], relevance: Mapping[str, int], top_k: int) ->
 
 
 def _dcg(grades: Sequence[int]) -> float:
-    return sum((2**grade - 1) / math.log2(rank + 1) for rank, grade in enumerate(grades, start=1))
+    return float(
+        sum((2**grade - 1) / math.log2(rank + 1) for rank, grade in enumerate(grades, start=1))
+    )
 
 
 def _dataset_digest(cases: Sequence[EvaluationCase]) -> str:

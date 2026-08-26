@@ -17,6 +17,7 @@ from rag_system.config import SecretValue, Settings
 from rag_system.domain import GeneratedAnswer, WebSearchResult
 from rag_system.health import HealthProbe
 from rag_system.provider_factory import ProviderBundle
+from rag_system.domain import IndexRef, SearchHit
 from rag_system.runtime_profile import RuntimeComponents
 
 
@@ -50,6 +51,35 @@ class _TestProviderFactory:
             web_search=self.web_search,
             query_planner=self.chat_model,
         )
+
+
+class _InjectedIndex:
+    index_ref = IndexRef("injected", 0, 0, 0.0)
+
+    def search(self, _query: str, *, top_k: int) -> tuple[SearchHit, ...]:
+        del top_k
+        return ()
+
+    def close(self) -> None:
+        return None
+
+    def delete(self) -> None:
+        return None
+
+
+class _InjectedRepository:
+    def __init__(self) -> None:
+        self.build_calls = 0
+
+    def build(self, _index_id: str, _chunks: object) -> _InjectedIndex:
+        self.build_calls += 1
+        return _InjectedIndex()
+
+    def delete(self, _index_id: str) -> bool:
+        return False
+
+    def healthcheck(self) -> bool:
+        return True
 
 
 class _RuntimeIndexManager:
@@ -123,6 +153,19 @@ class _TestRuntimeProfile:
 
 
 class BootstrapTests(unittest.TestCase):
+    def test_service_uses_an_explicit_vector_repository_when_injected(self) -> None:
+        settings = Settings(embedding_model="unused-for-this-test")
+        repository = _InjectedRepository()
+
+        service = build_service_from_settings(
+            settings,
+            provider_factory=_TestProviderFactory(),
+            index_repository=repository,
+        )
+
+        self.assertIs(service.index_manager.repository, repository)
+        service.close()
+
     def test_credentials_are_strict_and_raw_keys_are_not_retained_in_repr(self) -> None:
         raw_key = "0123456789abcdef0123456789abcdef"
         encoded = SecretValue(
