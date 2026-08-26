@@ -55,7 +55,8 @@ HTTP 入口不提供 TLS；公网部署必须使用受控反向代理。上传�
 | [`provider_factory.py`](../rag_system/provider_factory.py)、[`providers.py`](../rag_system/providers.py)、[`web.py`](../rag_system/web.py) | 提供商无关的适配器装配契约、内置智谱默认工厂、HTTP 传输、超时/重试/结束状态解析、网页结果去重与域名多样性 | 应用编排、回答 schema 的具体解释、任意 URL 抓取 |
 | [`memory.py`](../rag_system/memory.py) | TTL/LRU 有界的进程内会话历史 | 耐久会话或跨副本共享 |
 | [`observability.py`](../rag_system/observability.py)、[`metrics.py`](../rag_system/metrics.py) | 字段白名单 JSON 事件、低基数指标和关联 ID | 文档/问题正文日志或分布式追踪后端 |
-| [`bootstrap.py`](../rag_system/bootstrap.py) | 本地 UI 与生产 API 的依赖组装、严格凭据解析、启动恢复 | 运行时迁移编排 |
+| [`runtime_profile.py`](../rag_system/runtime_profile.py) | 可替换运行时 Profile 的组件所有权与就绪探针契约 | 具体 SQLite、文件或 Provider 实现 |
+| [`bootstrap.py`](../rag_system/bootstrap.py) | 默认 `local-durable` Profile 的组装、严格凭据解析、启动恢复与存储租约 | 运行时迁移编排 |
 
 领域对象和协议集中在 [`domain.py`](../rag_system/domain.py)、[`knowledge_base_contracts.py`](../rag_system/knowledge_base_contracts.py)、[`ports.py`](../rag_system/ports.py) 与 [`application.py`](../rag_system/application.py)。HTTP 只依赖应用端口；具体平台可以在组合根替换。架构测试同时禁止生产模块导入环、HTTP 反向依赖平台/存储实现，以及领域协议引入 Web、数据库或模型框架。
 

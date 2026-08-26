@@ -34,6 +34,7 @@ from rag_system.provider_factory import ProviderFactory, create_provider_bundle
 from rag_system.providers import ZhipuProviderFactory
 from rag_system.rate_limit import TokenBucketRateLimiter
 from rag_system.retrieval import LocalVectorIndexRepository
+from rag_system.runtime_profile import RuntimeComponents, RuntimeProfile
 from rag_system.service import RagService
 from rag_system.tenancy import ApiKeyAuthenticator, Principal, TenantId
 
@@ -155,6 +156,74 @@ class StorageRootLease:
             handle.close()
 
 
+class LocalDurableRuntimeProfile:
+    """Default SQLite/filesystem/thread-pool profile for one durable node."""
+
+    def build_components(
+        self,
+        settings: Settings,
+        *,
+        provider_factory: ProviderFactory | None = None,
+    ) -> RuntimeComponents:
+        service: KnowledgeService | None = None
+        jobs: JobExecutor | None = None
+        try:
+            service = build_service_from_settings(
+                settings,
+                provider_factory=provider_factory,
+            )
+            storage_root = settings.storage_root.expanduser().resolve()
+            catalog: KnowledgeBaseRepository = KnowledgeBaseCatalog(
+                storage_root / "catalog.sqlite3"
+            )
+            file_store: DocumentStore = TenantFileStore(
+                storage_root / "documents",
+                max_file_bytes=settings.max_file_bytes,
+                max_total_bytes=settings.max_tenant_storage_bytes,
+                max_files_per_tenant=settings.max_files_per_tenant,
+            )
+            job_snapshots = SqliteJobSnapshotStore(
+                storage_root / "jobs.sqlite3",
+                ttl_seconds=settings.job_history_ttl_seconds,
+                max_records_per_tenant=settings.job_history_max_per_tenant,
+            )
+            job_snapshots.recover_interrupted()
+            jobs = JobManager(
+                max_workers=settings.job_workers,
+                max_jobs=settings.max_jobs,
+                max_jobs_per_tenant=settings.max_jobs_per_tenant,
+                ttl_seconds=settings.job_ttl_seconds,
+                snapshot_store=job_snapshots,
+            )
+            idempotency: IdempotencyRepository = IdempotencyStore(
+                storage_root / "idempotency.sqlite3",
+                ttl_seconds=24 * 60 * 60,
+                max_records_per_tenant=10_000,
+            )
+            return RuntimeComponents(
+                service=service,
+                catalog=catalog,
+                file_store=file_store,
+                jobs=jobs,
+                idempotency=idempotency,
+            )
+        except Exception:
+            _close_unowned_components(service, jobs)
+            raise
+
+    def readiness_probes(
+        self,
+        components: RuntimeComponents,
+        principals: Sequence[Principal],
+    ) -> tuple[HealthProbe, ...]:
+        return (
+            HealthProbe("catalog", lambda: _catalog_ready(components.catalog, principals[0])),
+            HealthProbe("documents", components.file_store.healthcheck),
+            HealthProbe("jobs", components.jobs.healthcheck),
+            HealthProbe("vector", components.service.index_manager.healthcheck),
+        )
+
+
 def build_service_from_settings(
     settings: Settings,
     *,
@@ -241,6 +310,7 @@ def build_production_runtime(
     *,
     dotenv_path: Path | None = None,
     provider_factory: ProviderFactory | None = None,
+    runtime_profile: RuntimeProfile | None = None,
 ) -> ProductionRuntime:
     settings = load_settings(dotenv_path=dotenv_path)
     if not settings.persist_data:
@@ -252,48 +322,23 @@ def build_production_runtime(
     storage_root.mkdir(parents=True, exist_ok=True)
 
     storage_lease = StorageRootLease.acquire(storage_root)
+    profile = runtime_profile or LocalDurableRuntimeProfile()
+    components: RuntimeComponents | None = None
     platform: RagPlatform | None = None
     try:
         authenticator, principals = parse_api_credentials(settings.api_keys_json)
         metrics = create_operational_metrics()
-        service: KnowledgeService = build_service_from_settings(
+        components = profile.build_components(
             settings,
             provider_factory=provider_factory,
         )
-        catalog: KnowledgeBaseRepository = KnowledgeBaseCatalog(
-            storage_root / "catalog.sqlite3"
-        )
-        file_store: DocumentStore = TenantFileStore(
-            storage_root / "documents",
-            max_file_bytes=settings.max_file_bytes,
-            max_total_bytes=settings.max_tenant_storage_bytes,
-            max_files_per_tenant=settings.max_files_per_tenant,
-        )
-        job_snapshots = SqliteJobSnapshotStore(
-            storage_root / "jobs.sqlite3",
-            ttl_seconds=settings.job_history_ttl_seconds,
-            max_records_per_tenant=settings.job_history_max_per_tenant,
-        )
-        job_snapshots.recover_interrupted()
-        jobs: JobExecutor = JobManager(
-            max_workers=settings.job_workers,
-            max_jobs=settings.max_jobs,
-            max_jobs_per_tenant=settings.max_jobs_per_tenant,
-            ttl_seconds=settings.job_ttl_seconds,
-            snapshot_store=job_snapshots,
-        )
-        idempotency: IdempotencyRepository = IdempotencyStore(
-            storage_root / "idempotency.sqlite3",
-            ttl_seconds=24 * 60 * 60,
-            max_records_per_tenant=10_000,
-        )
         platform = RagPlatform(
             settings=settings,
-            service=service,
-            catalog=catalog,
-            file_store=file_store,
-            jobs=jobs,
-            idempotency=idempotency,
+            service=components.service,
+            catalog=components.catalog,
+            file_store=components.file_store,
+            jobs=components.jobs,
+            idempotency=components.idempotency,
             metrics=metrics,
         )
         rate_limiter = TokenBucketRateLimiter(
@@ -307,14 +352,7 @@ def build_production_runtime(
             known_secrets=(settings.api_key.reveal(),),
         )
         platform.recover_incomplete(principals)
-        readiness = ReadinessMonitor(
-            (
-                HealthProbe("catalog", lambda: _catalog_ready(catalog, principals[0])),
-                HealthProbe("documents", file_store.healthcheck),
-                HealthProbe("jobs", jobs.healthcheck),
-                HealthProbe("vector", service.index_manager.healthcheck),
-            )
-        )
+        readiness = ReadinessMonitor(profile.readiness_probes(components, principals))
     except Exception:
         try:
             if platform is not None:
@@ -323,6 +361,13 @@ def build_production_runtime(
                 except Exception:
                     logging.getLogger("rag_system.bootstrap").error(
                         "production runtime cleanup failed during startup"
+                    )
+            elif components is not None:
+                try:
+                    components.close()
+                except Exception:
+                    logging.getLogger("rag_system.bootstrap").error(
+                        "production component cleanup failed during startup"
                     )
         finally:
             storage_lease.close()
@@ -342,6 +387,35 @@ def build_production_runtime(
 def _catalog_ready(repository: KnowledgeBaseRepository, principal: Principal) -> bool:
     repository.list(principal, limit=1, offset=0)
     return True
+
+
+def _close_unowned_components(
+    service: KnowledgeService | None,
+    jobs: JobExecutor | None,
+) -> None:
+    """Best-effort cleanup while a default profile is only partially assembled."""
+
+    if jobs is not None:
+        try:
+            jobs.shutdown(wait=True, cancel_pending=True)
+        except Exception:
+            logging.getLogger("rag_system.bootstrap").error(
+                "job executor cleanup failed during profile assembly"
+            )
+    if service is None:
+        return
+    try:
+        service.index_manager.close()
+    except Exception:
+        logging.getLogger("rag_system.bootstrap").error(
+            "index lifecycle cleanup failed during profile assembly"
+        )
+    try:
+        service.close()
+    except Exception:
+        logging.getLogger("rag_system.bootstrap").error(
+            "service cleanup failed during profile assembly"
+        )
 
 
 def _strict_object(pairs: Sequence[tuple[str, Any]]) -> dict[str, Any]:

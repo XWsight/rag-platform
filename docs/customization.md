@@ -37,7 +37,8 @@ RAG Studio 是可派生的通用知识检索基座，而不是某个行业的固
 
 基座内置的 `ZhipuProviderFactory` 只是默认实现。派生项目应在自己的组合根显式构造
 `ProviderBundle`，再把工厂传给 `build_service`、`build_service_from_settings` 或
-`build_production_runtime`。不要通过环境变量指定 Python 类名或动态导入提供商；那会把部署
+`build_production_runtime`。如需替换 SQLite/本地文件/线程池这一整套耐久单节点实现，请实现
+`RuntimeProfile` 并将其显式传给 `build_production_runtime`，不要通过环境变量指定 Python 类名或动态导入提供商；那会把部署
 配置变成任意代码执行入口，也会使依赖审计和回滚失去确定性。
 
 自定义工厂只负责装配经过验证的适配器。回答协议、claim/citation 复核、请求级

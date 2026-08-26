@@ -86,6 +86,7 @@ files = [
   "rag_system/retrieval.py",
   "rag_system/retrieval_analysis.py",
   "rag_system/retrieval_experiments.py",
+  "rag_system/runtime_profile.py",
   "rag_system/routing.py",
   "rag_system/security.py",
   "rag_system/service.py",

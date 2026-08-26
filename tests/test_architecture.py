@@ -25,6 +25,7 @@ FRAMEWORK_NEUTRAL_MODULES = (
     "rag_system/knowledge_base_contracts.py",
     "rag_system/knowledge_base_lifecycle.py",
     "rag_system/retrieval_experiments.py",
+    "rag_system/runtime_profile.py",
 )
 FORBIDDEN_FRAMEWORK_PREFIXES = (
     "fastapi",

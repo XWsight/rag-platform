@@ -2,12 +2,21 @@ from __future__ import annotations
 
 import unittest
 import tempfile
+from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
-from rag_system.bootstrap import StorageRootLease, build_service_from_settings, parse_api_credentials
+from rag_system.bootstrap import (
+    StorageRootLease,
+    build_production_runtime,
+    build_service_from_settings,
+    parse_api_credentials,
+)
 from rag_system.config import SecretValue, Settings
 from rag_system.domain import GeneratedAnswer, WebSearchResult
+from rag_system.health import HealthProbe
 from rag_system.provider_factory import ProviderBundle
+from rag_system.runtime_profile import RuntimeComponents
 
 
 class _TestChat:
@@ -40,6 +49,69 @@ class _TestProviderFactory:
             web_search=self.web_search,
             query_planner=self.chat_model,
         )
+
+
+class _RuntimeIndexManager:
+    def __init__(self) -> None:
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+    def healthcheck(self) -> bool:
+        return True
+
+
+class _RuntimeService:
+    def __init__(self) -> None:
+        self.index_manager = _RuntimeIndexManager()
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _RuntimeJobs:
+    def __init__(self) -> None:
+        self.shutdown_calls = 0
+
+    def shutdown(self, *, wait: bool = True, cancel_pending: bool = True) -> None:
+        self.shutdown_calls += 1
+
+    def healthcheck(self) -> bool:
+        return True
+
+
+class _RuntimeCatalog:
+    def __init__(self, *, fail_listing: bool = False) -> None:
+        self.fail_listing = fail_listing
+
+    def list(self, *_args, **_kwargs) -> tuple[object, ...]:
+        if self.fail_listing:
+            raise RuntimeError("catalog startup failure")
+        return ()
+
+
+class _RuntimeFileStore:
+    def healthcheck(self) -> bool:
+        return True
+
+
+class _RuntimeIdempotency:
+    pass
+
+
+class _TestRuntimeProfile:
+    def __init__(self, components: RuntimeComponents) -> None:
+        self.components = components
+        self.calls = 0
+
+    def build_components(self, _settings, *, provider_factory=None) -> RuntimeComponents:
+        self.calls += 1
+        return self.components
+
+    def readiness_probes(self, _components, _principals) -> tuple[HealthProbe, ...]:
+        return (HealthProbe("profile", lambda: True),)
 
 
 class BootstrapTests(unittest.TestCase):
@@ -96,6 +168,70 @@ class BootstrapTests(unittest.TestCase):
         self.assertIs(service.chat_model, factory.chat_model)
         self.assertIs(service.web_search, factory.web_search)
         self.assertIs(service.query_planner, factory.chat_model)
+
+    def test_production_runtime_accepts_a_replaceable_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            settings = replace(
+                Settings(),
+                persist_data=True,
+                storage_root=Path(directory),
+                api_keys_json=SecretValue(
+                    '{"0123456789abcdef":{"subject":"operator",'
+                    '"tenant_id":"tenant-a","roles":["operator"]}}'
+                ),
+            )
+            service = _RuntimeService()
+            jobs = _RuntimeJobs()
+            profile = _TestRuntimeProfile(
+                RuntimeComponents(
+                    service=service,
+                    catalog=_RuntimeCatalog(),
+                    file_store=_RuntimeFileStore(),
+                    jobs=jobs,
+                    idempotency=_RuntimeIdempotency(),
+                )
+            )
+            with patch("rag_system.bootstrap.load_settings", return_value=settings):
+                runtime = build_production_runtime(runtime_profile=profile)
+            try:
+                self.assertEqual(profile.calls, 1)
+                self.assertTrue(runtime.ready())
+            finally:
+                runtime.close()
+
+            self.assertEqual(jobs.shutdown_calls, 1)
+            self.assertTrue(service.index_manager.closed)
+            self.assertTrue(service.closed)
+
+    def test_startup_failure_closes_components_owned_by_a_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            settings = replace(
+                Settings(),
+                persist_data=True,
+                storage_root=Path(directory),
+                api_keys_json=SecretValue(
+                    '{"0123456789abcdef":{"subject":"operator",'
+                    '"tenant_id":"tenant-a","roles":["operator"]}}'
+                ),
+            )
+            service = _RuntimeService()
+            jobs = _RuntimeJobs()
+            profile = _TestRuntimeProfile(
+                RuntimeComponents(
+                    service=service,
+                    catalog=_RuntimeCatalog(fail_listing=True),
+                    file_store=_RuntimeFileStore(),
+                    jobs=jobs,
+                    idempotency=_RuntimeIdempotency(),
+                )
+            )
+            with patch("rag_system.bootstrap.load_settings", return_value=settings):
+                with self.assertRaisesRegex(RuntimeError, "catalog startup failure"):
+                    build_production_runtime(runtime_profile=profile)
+
+            self.assertEqual(jobs.shutdown_calls, 1)
+            self.assertTrue(service.index_manager.closed)
+            self.assertTrue(service.closed)
 
 
 if __name__ == "__main__":
