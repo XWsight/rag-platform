@@ -33,6 +33,14 @@ class ConfigurationTests(unittest.TestCase):
             replace(settings, chunk_overlap=settings.chunk_size).validate()
         with self.assertRaises(ValueError):
             replace(settings, chat_url="http://example.com/chat").validate()
+        for field_name, value in (
+            ("chat_url", "https://example.com:bad/chat"),
+            ("search_url", "https://example.com:99999/search"),
+            ("chat_url", "https://user:pass@example.com/chat"),
+            ("search_url", "https://example.com:0/search"),
+        ):
+            with self.subTest(field_name=field_name, value=value), self.assertRaises(ValueError):
+                replace(settings, **{field_name: value}).validate()
 
     def test_non_finite_timeouts_and_character_bounds_are_rejected(self) -> None:
         settings = Settings()

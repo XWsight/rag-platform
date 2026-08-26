@@ -297,8 +297,21 @@ class Settings:
 
     @staticmethod
     def _validate_https_url(name: str, value: str) -> None:
-        parsed = urlparse(value)
-        if parsed.scheme != "https" or not parsed.hostname:
+        if not isinstance(value, str):
+            raise ValueError(f"{name} must be an absolute HTTPS URL")
+        try:
+            parsed = urlparse(value)
+            hostname = parsed.hostname
+            port = parsed.port
+        except ValueError:
+            raise ValueError(f"{name} must be an absolute HTTPS URL") from None
+        if (
+            parsed.scheme != "https"
+            or not hostname
+            or parsed.username
+            or parsed.password
+            or port == 0
+        ):
             raise ValueError(f"{name} must be an absolute HTTPS URL")
 
     @staticmethod
