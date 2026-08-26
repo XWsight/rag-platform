@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import Mock
 
+from rag_system.api_error_handlers import safe_emit
 from rag_system.api_errors import (
     APPLICATION_ERROR_TYPES,
     ApiBoundaryError,
@@ -20,6 +22,7 @@ from rag_system.file_store import DuplicateResourceError, StorageLimitError
 from rag_system.idempotency import IdempotencyConflictError
 from rag_system.job_contracts import JobStorageError
 from rag_system.tenancy import AuthenticationError, AuthorizationError
+from rag_system.observability import JsonEventLogger, TraceContext
 
 
 class ApiErrorContractTests(unittest.TestCase):
@@ -78,6 +81,19 @@ class ApiErrorContractTests(unittest.TestCase):
         self.assertEqual(error.headers, {"Retry-After": "1"})
         self.assertEqual(error.status_code, 429)
         self.assertEqual(str(error), "rate_limit_exceeded")
+
+    def test_observability_failure_cannot_change_the_http_outcome(self) -> None:
+        logger = Mock(spec=JsonEventLogger)
+        logger.emit.side_effect = RuntimeError("logger unavailable")
+
+        safe_emit(
+            logger,
+            "application_error",
+            context=TraceContext.new(),
+            fields={"operation": "answer", "outcome": "error"},
+        )
+
+        logger.emit.assert_called_once()
 
 
 if __name__ == "__main__":
