@@ -1,0 +1,16 @@
+"""Provider assembly for {{PRODUCT_NAME}}."""
+
+from __future__ import annotations
+
+from rag_system.config import Settings
+from rag_system.provider_factory import ProviderBundle
+from rag_system.providers import ZhipuProviderFactory
+
+
+class {{FACTORY_CLASS}}:
+    """Start safely with the base default, then replace adapters deliberately."""
+
+    def create(self, settings: Settings) -> ProviderBundle:
+        # Replace this delegation only after adding provider-specific offline tests.
+        # Do not bypass AnswerProtocol, claim/citation checks, or allow_cloud/allow_web.
+        return ZhipuProviderFactory().create(settings)

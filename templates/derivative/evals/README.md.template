@@ -1,0 +1,13 @@
+# {{PRODUCT_NAME}} evaluation data
+
+Keep domain evaluation data separate from the base corpus. Before modifying retrieval, routing,
+prompts, or provider behavior, create and review:
+
+- development cases for rapid iteration;
+- validation cases for threshold and design decisions;
+- held-out test cases that are not used for debugging;
+- answerable, refusal, permission, prompt-injection, conflicting-source, and domain-risk slices.
+
+Record data provenance, review owner, sensitivity classification, and the exact base commit used.
+Never commit customer documents, API keys, provider responses containing sensitive text, or exported
+production conversations.

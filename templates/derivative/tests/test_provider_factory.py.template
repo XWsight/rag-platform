@@ -1,0 +1,26 @@
+from __future__ import annotations
+
+import unittest
+
+from rag_system.config import Settings
+from rag_system.provider_factory import create_provider_bundle
+
+from {{PACKAGE_NAME}}.provider_factory import {{FACTORY_CLASS}}
+
+
+class ProviderFactoryTests(unittest.TestCase):
+    def test_factory_builds_the_base_contract_without_network_access(self) -> None:
+        providers = create_provider_bundle({{FACTORY_CLASS}}(), Settings())
+        try:
+            self.assertFalse(providers.chat_model.available)
+            self.assertFalse(providers.web_search.available)
+            self.assertIs(providers.query_planner, providers.chat_model)
+        finally:
+            for provider in (providers.chat_model, providers.web_search):
+                close = getattr(provider, "close", None)
+                if callable(close):
+                    close()
+
+
+if __name__ == "__main__":
+    unittest.main()

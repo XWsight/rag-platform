@@ -1,0 +1,27 @@
+# {{PRODUCT_NAME}}
+
+This folder is a derivative layer generated from the RAG Studio base. It intentionally does not
+copy the base runtime: retain the base package, its security boundaries, quality gates, and
+deployment files, then add domain-specific code here.
+
+## Included extension points
+
+- `provider_factory.py`: replace the default provider deliberately, through a typed factory.
+- `api_app.py`: ASGI entry point using this derivative factory.
+- `local_app.py`: optional local Gradio entry point using this derivative factory.
+- `tests/`: a no-network factory regression test.
+- `evals/`: a place to document and govern domain evaluation data.
+
+## First steps
+
+1. Merge `.env.example` into the base repository's `.env`; keep keys out of Git.
+2. Create domain development, validation, and held-out test data before tuning retrieval or prompts.
+3. Replace the default implementation in `provider_factory.py` only after its provider-specific
+   offline tests cover timeouts, authentication failures, schema failures, and error redaction.
+4. Launch `uvicorn {{PACKAGE_NAME}}.api_app:app` instead of the base `api_app:app` when using this layer.
+5. Run `python -m unittest {{PACKAGE_NAME}}.tests.test_provider_factory` and the base
+   `scripts/check.ps1` before every integration.
+
+The base contracts described in `docs/customization.md` and `docs/provider-conformance.md` remain
+mandatory. This layer must not bypass claim/citation validation, tenant isolation, or request-level
+outbound authorization.
