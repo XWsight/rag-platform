@@ -107,6 +107,27 @@ jobs:
           python -m pip install pip-audit==2.10.1
           python scripts/audit_dependencies.py
 
+  runtime-sbom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install declared runtime dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Generate runtime SPDX inventory
+        run: >-
+          python scripts/generate_runtime_sbom.py
+          --requirements requirements.txt
+          --output reports/runtime-sbom.spdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runtime-sbom-${{ github.sha }}
+          path: reports/runtime-sbom.spdx.json
+          if-no-files-found: error
+
   release-manifest:
     runs-on: ubuntu-latest
     steps:
