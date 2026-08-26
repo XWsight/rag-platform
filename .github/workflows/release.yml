@@ -24,8 +24,10 @@ jobs:
           cache: pip
       - name: Require stable package version and matching tag
         run: python scripts/verify_release.py --tag "${GITHUB_REF_NAME}"
-      - name: Install declared runtime dependencies
-        run: python -m pip install -r requirements.txt
+      - name: Verify and install locked runtime dependencies
+        run: |
+          python scripts/verify_dependency_lock.py
+          python -m pip install --find-links https://download.pytorch.org/whl/cpu/torch/ --require-hashes -r requirements-py312.lock
       - name: Generate SPDX dependency inventory
         run: >-
           python scripts/generate_runtime_sbom.py
@@ -62,6 +64,13 @@ jobs:
           subject-name: ghcr.io/${{ github.repository }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
+      - name: Record immutable image reference
+        run: >-
+          python scripts/release_image_evidence.py
+          --image ghcr.io/${{ github.repository }}
+          --digest ${{ steps.build.outputs.digest }}
+          --source-revision ${{ github.sha }}
+          --output reports/release-image.json
       - name: Create GitHub release with review artifacts
         env:
           GH_TOKEN: ${{ github.token }}
@@ -69,5 +78,6 @@ jobs:
           gh release create "${GITHUB_REF_NAME}"
           reports/runtime-sbom.spdx.json
           reports/release-manifest.json
+          reports/release-image.json
           --generate-notes
           --title "RAG Studio ${GITHUB_REF_NAME}"

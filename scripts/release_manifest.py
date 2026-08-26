@@ -24,6 +24,9 @@ _INPUTS = (
     "compose.yaml",
     "pyproject.toml",
     "requirements.txt",
+    "requirements-lock.in",
+    "requirements-py311.lock",
+    "requirements-py312.lock",
     "requirements-dev.txt",
 )
 

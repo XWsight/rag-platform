@@ -36,6 +36,7 @@ Push-Location $projectRoot
 try {
     Invoke-CheckedPython -m compileall -q rag_system tests scripts app.py api_app.py
     Invoke-CheckedPython scripts/scan_secrets.py
+    Invoke-CheckedPython scripts/verify_dependency_lock.py
     Invoke-CheckedPython scripts/audit_dependencies.py
     Invoke-CheckedPython -m ruff check .
     Invoke-CheckedPython -m mypy

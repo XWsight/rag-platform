@@ -88,12 +88,33 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - name: Install declared runtime and development dependencies
-        run: python -m pip install -r requirements-dev.txt
+      - name: Install locked runtime dependencies and direct development tools
+        run: |
+          python scripts/verify_dependency_lock.py
+          python -m pip install --find-links https://download.pytorch.org/whl/cpu/torch/ --require-hashes -r requirements-py311.lock
+          python -m pip install --no-deps -r requirements-dev.txt
       - name: Verify resolved environment
         run: |
           python -m pip check
           python -c "import httpx; assert httpx.__version__ == '0.28.1'"
+
+  locked-runtime:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Verify and install the hashed runtime closure
+        run: |
+          python scripts/verify_dependency_lock.py
+          python -m pip install --find-links https://download.pytorch.org/whl/cpu/torch/ --require-hashes -r requirements-py${{ matrix.python-version == '3.11' && '311' || '312' }}.lock
+          python -m pip check
 
   browser-contract:
     runs-on: ubuntu-latest
@@ -126,8 +147,10 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install declared runtime dependencies
-        run: python -m pip install -r requirements.txt
+      - name: Install locked runtime dependencies
+        run: >-
+          python -m pip install --find-links https://download.pytorch.org/whl/cpu/torch/
+          --require-hashes -r requirements-py312.lock
       - name: Generate runtime SPDX inventory
         run: >-
           python scripts/generate_runtime_sbom.py

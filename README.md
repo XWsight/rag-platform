@@ -175,7 +175,7 @@ curl --fail http://127.0.0.1:8000/health/ready
 
 Compose 默认仅发布到 `127.0.0.1`，使用非 root 用户、只读容器根文件系统、最小权限、资源上限、日志轮转和 `/data` 持久卷。公网访问必须由可信反向代理终止 TLS。备份、恢复、升级、回滚、密钥轮换和删除要求见[部署说明](docs/deployment.md)与[运维手册](docs/operations.md)；Prometheus 抓取与告警的受控部署方式见[监控说明](docs/monitoring.md)。
 
-准备发布时可运行 `python scripts\release_manifest.py --require-clean --json-output reports\release-manifest.json`，记录源码提交、包版本和 Docker/Compose/依赖清单的 SHA-256。CI 还会从干净的运行时依赖环境生成 SPDX 2.3 SBOM 工件；本地可运行 `python scripts\generate_runtime_sbom.py --output reports\runtime-sbom.spdx.json` 复核。两者都不会读取 `.env`，也不等同于镜像签名或完整传递依赖哈希锁定。
+运行时直接依赖保存在易审查的 `requirements.txt`，其完整传递闭包与 SHA-256 哈希按受支持 Python 小版本固定在 `requirements-py311.lock` 和 `requirements-py312.lock`。`requirements-lock.in` 在这份通用审计输入之外，明确 CPU-only 部署所需的 torch wheel 选择。安装生产依赖时选择当前解释器对应的锁文件，例如 Python 3.11 使用 `python -m pip install --find-links https://download.pytorch.org/whl/cpu/torch/ --require-hashes -r requirements-py311.lock`；修改直接依赖后，对每个支持版本使用相同的 `pip-compile --generate-hashes --find-links https://download.pytorch.org/whl/cpu/torch/ requirements-lock.in` 命令有意更新锁文件，并运行 `python scripts\verify_dependency_lock.py`。这里的专用 wheel 目录只提供 CPU 版 torch，不会让 PyTorch 镜像覆盖同名 PyPI 包。准备发布时可运行 `python scripts\release_manifest.py --require-clean --json-output reports\release-manifest.json`，记录源码提交、包版本和 Docker/Compose/依赖清单的 SHA-256。CI 还会从干净的锁定运行时环境生成 SPDX 2.3 SBOM 工件；稳定发行还会附上不可变 OCI `image@sha256:...` 引用、BuildKit provenance 与镜像 SBOM。两者都不会读取 `.env`，也不等同于运行时密钥管理。
 
 ## 验证与评测
 

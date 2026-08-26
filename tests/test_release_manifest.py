@@ -21,6 +21,9 @@ class ReleaseManifestTests(unittest.TestCase):
                 "compose.yaml",
                 "pyproject.toml",
                 "requirements.txt",
+                "requirements-lock.in",
+                "requirements-py311.lock",
+                "requirements-py312.lock",
                 "requirements-dev.txt",
             ):
                 content = b'[project]\nversion = "2.0.0"\n' if relative == "pyproject.toml" else relative.encode()

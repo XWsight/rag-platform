@@ -1,0 +1,5 @@
+-r requirements.txt
+
+# The deployment image is CPU-only.  Keep this provider-specific wheel choice
+# out of the direct audit input, while pinning it in every hashed runtime lock.
+torch==2.13.0+cpu

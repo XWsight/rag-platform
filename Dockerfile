@@ -1,26 +1,26 @@
 # syntax=docker/dockerfile:1.7
 
 ARG PYTHON_VERSION=3.12.11
-ARG PYTORCH_CPU_INDEX=https://download.pytorch.org/whl/cpu
+ARG PYTORCH_CPU_WHEELS=https://download.pytorch.org/whl/cpu/torch/
 ARG VCS_REF=unknown
 
 FROM python:${PYTHON_VERSION}-slim-bookworm AS wheels
 
-ARG PYTORCH_CPU_INDEX
+ARG PYTORCH_CPU_WHEELS
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
 
 WORKDIR /build
-COPY requirements.txt ./
+COPY requirements.txt requirements-py312.lock ./
 
 # Resolve dependencies once, then install the resulting wheel set without
 # network access in the runtime stage.
-# The service uses embedding inference on CPU.  Prefer PyTorch's CPU wheel so
-# a general-purpose deployment image does not carry CUDA runtime libraries.
+# The service uses embedding inference on CPU.  Only expose PyTorch's dedicated
+# torch wheel listing; a general extra index could shadow unrelated PyPI packages.
 RUN python -m pip install --no-cache-dir --upgrade pip==25.1.1 && \
     python -m pip wheel --no-cache-dir --wheel-dir /wheels \
-      --extra-index-url "${PYTORCH_CPU_INDEX}" -r requirements.txt
+      --find-links "${PYTORCH_CPU_WHEELS}" --require-hashes -r requirements-py312.lock
 
 
 FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
@@ -48,10 +48,10 @@ RUN groupadd --gid "${APP_GID}" app && \
 
 WORKDIR /app
 
-COPY requirements.txt ./
+COPY requirements.txt requirements-py312.lock ./
 COPY --from=wheels /wheels /wheels
 RUN python -m pip install --no-cache-dir --no-index --find-links=/wheels \
-      -r requirements.txt && \
+      --require-hashes -r requirements-py312.lock && \
     rm -rf /wheels
 
 COPY --chown=app:app rag_system ./rag_system

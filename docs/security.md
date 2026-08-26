@@ -99,13 +99,13 @@ Prometheus 指标使用固定 operation/outcome/route/provider 等低基数枚�
 
 ## 依赖与供应链
 
-CI 运行 Ruff、Python 3.11/3.12 单元测试、分支覆盖率门槛和严格依赖审计。依赖审计读取未过滤的 `pip-audit` JSON；任何新漏洞、可升级修复、版本漂移、陈旧例外或过期例外都会失败。直接运行依赖固定到具体版本，容器以非 root、只读根文件系统和收紧 capabilities 的方式运行。
+CI 运行 Ruff、Python 3.11/3.12 单元测试、分支覆盖率门槛和严格依赖审计。运行时直接依赖固定在 `requirements.txt`，完整传递闭包及 SHA-256 哈希按解释器小版本固定在 `requirements-py311.lock` 与 `requirements-py312.lock`；CI 和 Docker 都以 `--require-hashes` 安装，并在两个受支持 Python 版本解析验证。依赖审计读取未过滤的 `pip-audit` JSON；任何新漏洞、可升级修复、版本漂移、陈旧例外或过期例外都会失败。容器以非 root、只读根文件系统和收紧 capabilities 的方式运行。
 
 ChromaDB 及其框架适配器已从运行依赖和生产数据路径中移除。当前向量后端是受限的进程内精确余弦索引：仅把由受信 Embedding 实现生成的有限向量持久化到 `/data/vector`，写入通过临时文件与原子替换完成，并在重开时核对 schema、模型标识、向量有限性、维度和 chunk 清单。损坏索引会关闭式失败，必须从原始文档重建；不得导入不可信向量文件。
 
 [`security/dependency-exceptions.json`](../security/dependency-exceptions.json) 当前为空。CI 仍会严格检查未过滤的 `pip-audit` 输出；任何新漏洞、可升级修复、版本漂移、陈旧或过期例外都会失败。只有在不存在可用修复且已完成针对具体攻击面的书面评审时，才允许新增短期、精确的例外。
 
-这不是完整供应链保证：多数传递依赖仍未按哈希锁定，`pip-audit` 只反映其漏洞数据库在扫描时已知的问题，也不验证恶意包、模型权重或构建来源。发布流程应生成 SBOM、锁定传递依赖与哈希、保留镜像 digest、扫描镜像和模型制品，并在预生产环境回归升级。
+这不是完整供应链保证：哈希锁只固定已选择的 Python 分发包，`pip-audit` 只反映其漏洞数据库在扫描时已知的问题，也不验证恶意包、模型权重或构建来源。发布流程会生成 SBOM、保留镜像 digest 和 provenance；仍应扫描镜像和模型制品，并在预生产环境回归升级。
 
 ## 上线前必须补充的验证
 

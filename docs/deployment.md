@@ -83,7 +83,7 @@ Dockerfile 固定 Python 补丁版本，先生成 wheel 集合，再在运行阶
 
 镜像写入 OCI `org.opencontainers.image.revision` 标签。CI 用 GitHub 提交设置并在构建后校验该标签；本地构建默认值为 `unknown`，可在 `.env` 中设置 `RAG_SOURCE_REVISION=<已审查提交>` 以保留同样的追溯信息。
 
-依赖清单固定了直接依赖版本，但没有锁定每个传递依赖的哈希。因此生产发布应在 CI 中只构建一次，把镜像推送到受控仓库，并以不可变镜像 digest 在各环境间晋级；不要在生产主机临时重新解析依赖并把它视为相同制品。
+`requirements.txt` 固定易审查的直接依赖版本，`requirements-py311.lock` 与 `requirements-py312.lock` 分别固定对应解释器的运行时传递依赖 SHA-256 哈希。Docker 和 CI 都以 `--require-hashes` 使用对应锁文件；直接依赖变更必须同时有意更新并审查两个锁文件。生产发布仍应在 CI 中只构建一次，把镜像推送到受控仓库，并以不可变镜像 digest 在各环境间晋级；不要在生产主机临时重新解析依赖并把它视为相同制品。
 
 示例标签流程：
 
@@ -94,10 +94,10 @@ docker image inspect rag-studio:2026.08.11-1 --format '{{json .RepoDigests}}'
 
 正式环境应记录代码提交、镜像 digest、配置版本、数据快照和部署时间。输出为 `[]` 或 `null` 表示镜像尚未推送到仓库，此时不能声称它是可跨主机验证的不可变制品。
 
-仓库 CI 还会保存 `release-manifest-<commit>` 工件，其中记录干净源码提交、包版本及 Dockerfile、Compose、`pyproject.toml`、运行/开发依赖清单的 SHA-256。该清单不读取 `.env`，适合把一次镜像构建关联到其受控输入；它不替代镜像签名、SBOM 或传递依赖哈希锁定。
+仓库 CI 还会保存 `release-manifest-<commit>` 工件，其中记录干净源码提交、包版本及 Dockerfile、Compose、`pyproject.toml`、运行/开发依赖清单和两个运行时哈希锁的 SHA-256。该清单不读取 `.env`，适合把一次镜像构建关联到其受控输入；它不替代镜像签名或 SBOM。
 
 推送与稳定 `pyproject.toml` 版本完全一致的 `v<version>` Git tag 后，`release` workflow 会附上 SPDX
-SBOM 与 release manifest 并创建 GitHub Release。当前开发版本带 `.dev`，因此会被工作流拒绝，避免把开发
+SBOM、release manifest 和不可变 `image@sha256:...` 引用并创建 GitHub Release。当前开发版本带 `.dev`，因此会被工作流拒绝，避免把开发
 快照误标为正式发行。稳定 tag 会把镜像推送至 `ghcr.io/<owner>/rag-system`，生成 BuildKit provenance/SBOM，
 并提交 GitHub build provenance attestation；部署时必须记录和固定该镜像 digest，不能只引用可变 tag。
 首次发布前需在仓库 Settings 中确认 GitHub Actions 具有 Packages 写入权限，并按组织策略将 GHCR 包设为
