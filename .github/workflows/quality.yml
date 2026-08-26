@@ -91,3 +91,48 @@ jobs:
         run: |
           python -m pip install pip-audit==2.10.1
           python scripts/audit_dependencies.py
+
+  container-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - name: Create isolated Compose configuration
+        shell: bash
+        run: |
+          cat > .env <<'EOF'
+          RAG_PERSIST_DATA=true
+          RAG_STORAGE_ROOT=/data
+          RAG_PRODUCT_NAME=RAG Studio CI
+          RAG_PRODUCT_TAGLINE=Container smoke test
+          RAG_API_KEYS_JSON={"ci-smoke-key-0123456789abcdef":{"subject":"ci","tenant_id":"ci","roles":["reader","writer","operator"]}}
+          RAG_IMAGE_TAG=ci-${{ github.run_id }}-${{ github.run_attempt }}
+          RAG_DATA_VOLUME=rag-studio-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          RAG_BIND_ADDRESS=127.0.0.1
+          RAG_PUBLISHED_PORT=8000
+          EOF
+          docker compose -p rag-studio-ci config --quiet
+      - name: Build hardened image
+        run: docker compose -p rag-studio-ci build api
+      - name: Start service and verify health plus authentication
+        shell: bash
+        run: |
+          docker compose -p rag-studio-ci up -d
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent --show-error http://127.0.0.1:8000/health/ready; then
+              break
+            fi
+            if [ "$attempt" = 45 ]; then
+              exit 1
+            fi
+            sleep 2
+          done
+          curl --fail --silent --show-error \
+            -H 'X-API-Key: ci-smoke-key-0123456789abcdef' \
+            http://127.0.0.1:8000/v1/knowledge-bases
+      - name: Show Compose diagnostics on failure
+        if: failure()
+        run: docker compose -p rag-studio-ci ps; docker compose -p rag-studio-ci logs --tail=300 api
+      - name: Remove CI container and volume
+        if: always()
+        run: docker compose -p rag-studio-ci down --volumes --remove-orphans

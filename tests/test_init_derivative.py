@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 import contextlib
+import importlib
 import io
+import json
+import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+
+from fastapi.testclient import TestClient
 
 from scripts.init_derivative import create_derivative, main
 
@@ -63,6 +70,52 @@ class InitDerivativeTests(unittest.TestCase):
 
             self.assertEqual(caught.exception.code, 2)
             self.assertFalse(destination.exists())
+
+    def test_generated_api_assembles_and_serves_an_authenticated_request(self) -> None:
+        package_name = "legal_assistant"
+        api_key = "derivative-key-0123456789abcdef"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            create_derivative(
+                package_name=package_name,
+                output=root / package_name,
+                product_name="Legal Assistant",
+                product_tagline="Evidence-first legal workspace",
+            )
+            environment = {
+                "RAG_PERSIST_DATA": "true",
+                "RAG_STORAGE_ROOT": str(root / "data"),
+                "RAG_PRODUCT_NAME": "Legal Assistant",
+                "RAG_PRODUCT_TAGLINE": "Evidence-first legal workspace",
+                "RAG_API_KEYS_JSON": json.dumps(
+                    {
+                        api_key: {
+                            "subject": "derivative-test",
+                            "tenant_id": "derivative",
+                            "roles": ["reader", "writer", "operator"],
+                        }
+                    }
+                ),
+            }
+            sys.path.insert(0, str(root))
+            try:
+                with patch.dict(os.environ, environment, clear=True):
+                    with patch("logging.basicConfig"):
+                        module = importlib.import_module(f"{package_name}.api_app")
+                    with TestClient(module.app, raise_server_exceptions=False) as client:
+                        self.assertEqual(client.get("/health/ready").status_code, 200)
+                        response = client.get(
+                            "/v1/knowledge-bases",
+                            headers={"X-API-Key": api_key},
+                        )
+                        self.assertEqual(response.status_code, 200)
+                        self.assertEqual(response.json()["items"], [])
+                        self.assertEqual(client.get("/openapi.json").json()["info"]["title"], "Legal Assistant API")
+            finally:
+                sys.path.remove(str(root))
+                for module_name in tuple(sys.modules):
+                    if module_name == package_name or module_name.startswith(f"{package_name}."):
+                        del sys.modules[module_name]
 
 
 if __name__ == "__main__":
