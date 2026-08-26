@@ -25,6 +25,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertGreaterEqual(settings.max_jobs, settings.job_workers)
         self.assertGreater(settings.job_history_ttl_seconds, settings.job_ttl_seconds)
         self.assertGreaterEqual(settings.job_history_max_per_tenant, settings.max_jobs)
+        self.assertEqual(settings.product_name, "RAG Studio")
 
     def test_invalid_chunking_and_url_are_rejected(self) -> None:
         settings = Settings()
@@ -71,6 +72,13 @@ class ConfigurationTests(unittest.TestCase):
         for minimum in (-0.01, 1.01, float("nan")):
             with self.subTest(minimum=minimum), self.assertRaises(ValueError):
                 replace(settings, routing_min_lexical_score=minimum).validate()
+        for field_name, value in (
+            ("product_name", ""),
+            ("product_name", "name\nwith-newline"),
+            ("product_tagline", "x" * 161),
+        ):
+            with self.subTest(field_name=field_name, value=value), self.assertRaises(ValueError):
+                replace(settings, **{field_name: value}).validate()
 
 
 if __name__ == "__main__":

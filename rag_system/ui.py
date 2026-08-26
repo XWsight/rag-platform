@@ -126,7 +126,7 @@ def create_demo(service: RagService, settings: Settings):
         service.clear_session(session_id)
         return [], "", "", {}
 
-    with gr.Blocks(title="RAG Studio") as demo:
+    with gr.Blocks(title=settings.product_name) as demo:
         index_state = gr.State(value="", time_to_live=settings.session_ttl_seconds)
         session_state = gr.State(
             value=lambda: uuid4().hex,
@@ -135,8 +135,10 @@ def create_demo(service: RagService, settings: Settings):
         )
 
         gr.Markdown(
-            """
-# RAG Studio
+            f"""
+# {settings.product_name}
+
+{settings.product_tagline}
 
 多文档知识检索、关键词与向量融合、置信度路由和可核验引用。
 默认不会发送文档内容或问题到外部服务；需要时请主动开启对应选项。

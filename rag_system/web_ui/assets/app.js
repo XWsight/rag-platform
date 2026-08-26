@@ -11,6 +11,7 @@ const state = {
   busy: false,
   search: "",
   pendingConsent: null,
+  productName: document.querySelector("#product-name")?.textContent || "RAG Studio",
 };
 
 const ui = {
@@ -69,6 +70,8 @@ const ui = {
   denyConsent: document.querySelector("#deny-consent"),
   grantConsent: document.querySelector("#grant-consent"),
   toastStack: document.querySelector("#toast-stack"),
+  productName: document.querySelector("#product-name"),
+  productTagline: document.querySelector("#product-tagline"),
 };
 
 function readSession(key) {
@@ -416,7 +419,7 @@ function hideTask() {
 
 function addMessage(role, content, options = {}) {
   const article = node("article", `message ${role}${options.pending ? " pending" : ""}`);
-  article.append(node("div", "message-label", role === "user" ? "你" : "RAG Studio"));
+  article.append(node("div", "message-label", role === "user" ? "你" : state.productName));
   const body = node("div", "message-body");
   if (options.pending) {
     const dots = node("span", "typing-dots");
@@ -616,7 +619,7 @@ function requestExternalConsent(control) {
   const cloud = control === ui.allowCloud;
   ui.consentTitle.textContent = cloud ? "开启云端生成？" : "开启联网补充？";
   ui.consentDescription.textContent = cloud
-    ? "系统会把当前问题和命中的检索证据发送给已配置的智谱模型，用于组织自然语言回答。"
+    ? "系统会把当前问题和命中的检索证据发送给已配置的云端模型，用于组织自然语言回答。"
     : "当本地证据不足时，系统会把当前问题发送给已配置的网络搜索服务，并展示外部来源。";
   ui.consentBoundary.textContent = cloud
     ? "发送：问题、必要的对话上下文、检索证据。不发送：本地访问密钥、租户标识、未命中的完整文档。"
@@ -733,6 +736,7 @@ function bindEvents() {
 }
 
 async function start() {
+  await loadProductConfiguration();
   bindEvents();
   updatePrivacyNote();
   resetConversation();
@@ -746,6 +750,24 @@ async function start() {
   } catch (error) {
     if (error.status === 401) showKeyDialog("当前密钥无效，请重新连接。");
     else toast(error.message, "error");
+  }
+}
+
+async function loadProductConfiguration() {
+  try {
+    const response = await fetch("/app/config", {cache: "no-store"});
+    if (!response.ok) return;
+    const configuration = await response.json();
+    if (typeof configuration.product_name === "string" && configuration.product_name) {
+      state.productName = configuration.product_name;
+      document.title = configuration.product_name;
+      ui.productName.textContent = configuration.product_name;
+    }
+    if (typeof configuration.product_tagline === "string" && configuration.product_tagline) {
+      ui.productTagline.textContent = configuration.product_tagline;
+    }
+  } catch {
+    // The static fallback branding keeps the product usable during a transient API failure.
   }
 }
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 
@@ -29,7 +29,7 @@ _APP_SECURITY_HEADERS = {
 }
 
 
-def mount_web_ui(app: FastAPI) -> None:
+def mount_web_ui(app: FastAPI, *, product_name: str, product_tagline: str) -> None:
     """Mount the packaged browser client without changing the API boundary."""
 
     index_file = _WEB_ROOT / "index.html"
@@ -48,6 +48,15 @@ def mount_web_ui(app: FastAPI) -> None:
             index_file,
             media_type="text/html",
             headers=_APP_SECURITY_HEADERS,
+        )
+
+    @app.get("/app/config", include_in_schema=False)
+    def product_configuration() -> JSONResponse:
+        """Expose non-sensitive presentation settings to the same-origin client."""
+
+        return JSONResponse(
+            {"product_name": product_name, "product_tagline": product_tagline},
+            headers={"Cache-Control": "no-store"},
         )
 
     app.mount("/app/assets", StaticFiles(directory=assets), name="web-assets")

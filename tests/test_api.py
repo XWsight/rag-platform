@@ -251,6 +251,14 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(page.headers["x-frame-options"], "DENY")
         self.assertEqual(page.headers["referrer-policy"], "no-referrer")
 
+        configuration = self.client.get("/app/config")
+        self.assertEqual(configuration.status_code, 200)
+        self.assertEqual(
+            configuration.json(),
+            {"product_name": "RAG Studio", "product_tagline": "Evidence workspace"},
+        )
+        self.assertEqual(configuration.headers["cache-control"], "no-store")
+
         script = self.client.get("/app/assets/app.js")
         stylesheet = self.client.get("/app/assets/styles.css")
         self.assertEqual(script.status_code, 200)
@@ -259,8 +267,35 @@ class ApiTests(unittest.TestCase):
         self.assertNotIn("localStorage", script.text)
         self.assertIn("requestExternalConsent", script.text)
         self.assertIn("navigator.clipboard.writeText", script.text)
+        self.assertIn("loadProductConfiguration", script.text)
         self.assertEqual(stylesheet.status_code, 200)
         self.assertIn(".app-shell", stylesheet.text)
+
+    def test_product_branding_is_configurable_without_changing_api_paths(self) -> None:
+        branded_platform = FakePlatform()
+        branded_platform.settings = Settings(
+            product_name="Acme Knowledge Hub",
+            product_tagline="Trusted internal answers",
+        )
+        app = create_app(
+            platform=branded_platform,
+            authenticator=self.authenticator,
+            rate_limiter=TokenBucketRateLimiter(rate_per_second=100, capacity=100),
+            logger=self.logger,
+        )
+        with TestClient(app, raise_server_exceptions=False) as client:
+            configuration = client.get("/app/config")
+            openapi = client.get("/openapi.json")
+
+        self.assertEqual(app.title, "Acme Knowledge Hub API")
+        self.assertEqual(
+            configuration.json(),
+            {
+                "product_name": "Acme Knowledge Hub",
+                "product_tagline": "Trusted internal answers",
+            },
+        )
+        self.assertEqual(openapi.json()["info"]["title"], "Acme Knowledge Hub API")
 
     def test_unready_is_safe_503_envelope(self) -> None:
         app = create_app(

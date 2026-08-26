@@ -51,6 +51,11 @@ def _env_float(name: str, default: float) -> float:
     return default if value is None else float(value)
 
 
+def _env_text(name: str, default: str) -> str:
+    value = os.getenv(name)
+    return default if value is None else value.strip()
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     """Runtime settings loaded once at application bootstrap."""
@@ -70,6 +75,12 @@ class Settings:
     )
     api_docs_enabled: bool = field(
         default_factory=lambda: _env_bool("RAG_API_DOCS_ENABLED", True)
+    )
+    product_name: str = field(default_factory=lambda: _env_text("RAG_PRODUCT_NAME", "RAG Studio"))
+    product_tagline: str = field(
+        default_factory=lambda: _env_text(
+            "RAG_PRODUCT_TAGLINE", "Evidence workspace"
+        )
     )
     api_key: SecretValue = field(default_factory=lambda: SecretValue(os.getenv("ZHIPU_API_KEY")))
     chat_model: str = field(default_factory=lambda: os.getenv("ZHIPU_MODEL", "glm-5.2"))
@@ -195,6 +206,8 @@ class Settings:
     def validate(self) -> Settings:
         if not str(self.storage_root).strip():
             raise ValueError("storage_root cannot be empty")
+        self._validate_display_text("product_name", self.product_name, maximum=80)
+        self._validate_display_text("product_tagline", self.product_tagline, maximum=160)
         if not 100 <= self.chunk_size <= 4_000:
             raise ValueError("chunk_size must be between 100 and 4000")
         if not 0 <= self.chunk_overlap < self.chunk_size:
@@ -287,6 +300,15 @@ class Settings:
         parsed = urlparse(value)
         if parsed.scheme != "https" or not parsed.hostname:
             raise ValueError(f"{name} must be an absolute HTTPS URL")
+
+    @staticmethod
+    def _validate_display_text(name: str, value: str, *, maximum: int) -> None:
+        if (
+            not isinstance(value, str)
+            or not 1 <= len(value) <= maximum
+            or any(ord(character) < 32 or ord(character) == 127 for character in value)
+        ):
+            raise ValueError(f"{name} must be 1-{maximum} printable characters")
 
 
 def load_settings(*, dotenv_path: Path | None = None) -> Settings:

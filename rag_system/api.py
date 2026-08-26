@@ -103,15 +103,19 @@ def create_app(
             await run_in_threadpool(shutdown or platform.close)
 
     app = FastAPI(
-        title="RAG Studio API",
-        summary="Tenant-isolated knowledge retrieval and grounded answering.",
+        title=f"{settings.product_name} API",
+        summary="Tenant-isolated, grounded knowledge retrieval and answering.",
         version="2.0.0",
         docs_url="/docs" if docs_enabled else None,
         redoc_url="/redoc" if docs_enabled else None,
         openapi_url="/openapi.json" if docs_enabled else None,
         lifespan=lifespan,
     )
-    mount_web_ui(app)
+    mount_web_ui(
+        app,
+        product_name=settings.product_name,
+        product_tagline=settings.product_tagline,
+    )
 
     def custom_openapi() -> dict[str, Any]:
         """Describe multipart documents as browser-selectable files in Swagger UI.
