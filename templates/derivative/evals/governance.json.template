@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "product_name": "{{PRODUCT_NAME}}",
+  "base_revision": "{{BASE_REVISION}}",
+  "owner": "replace-with-domain-evaluation-owner",
+  "data_classification": "internal",
+  "status": "draft",
+  "held_out_test_status": "unconsumed",
+  "retrieval": {
+    "suite": "retrieval_suite.json",
+    "contract": "gates/retrieval-suite.json"
+  },
+  "answer": {
+    "suite": "answer_suite.json",
+    "contract": "gates/answer-suite.json"
+  }
+}

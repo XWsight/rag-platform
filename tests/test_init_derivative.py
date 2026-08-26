@@ -38,6 +38,10 @@ class InitDerivativeTests(unittest.TestCase):
             self.assertIn("RAG_PRODUCT_NAME=Legal Assistant", (created / ".env.example").read_text())
             self.assertIn("Upstream baseline", (created / "UPSTREAM.md").read_text())
             self.assertNotIn("{{", (created / "UPSTREAM.md").read_text())
+            governance = json.loads((created / "evals" / "governance.json").read_text())
+            self.assertEqual(governance["status"], "draft")
+            self.assertEqual(governance["product_name"], "Legal Assistant")
+            self.assertNotIn("{{", json.dumps(governance))
 
     def test_accepts_an_explicit_base_revision_for_a_reproducible_baseline(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

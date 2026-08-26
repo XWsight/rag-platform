@@ -10,7 +10,7 @@ deployment files, then add domain-specific code here.
 - `api_app.py`: ASGI entry point using this derivative factory.
 - `local_app.py`: optional local Gradio entry point using this derivative factory.
 - `tests/`: a no-network factory regression test.
-- `evals/`: a place to document and govern domain evaluation data.
+- `evals/`: a machine-readable governance record for domain evaluation data.
 
 ## First steps
 
@@ -19,7 +19,12 @@ deployment files, then add domain-specific code here.
 3. Replace the default implementation in `provider_factory.py` only after its provider-specific
    offline tests cover timeouts, authentication failures, schema failures, and error redaction.
 4. Launch `uvicorn {{PACKAGE_NAME}}.api_app:app` instead of the base `api_app:app` when using this layer.
-5. Run `python -m unittest {{PACKAGE_NAME}}.tests.test_provider_factory` and the base
+5. Record an evaluation owner, classification and independent suite paths in
+   `evals/governance.json`; it deliberately starts as `draft` and is not a fake baseline.
+6. Run `python scripts/validate_derivative_evaluation.py {{PACKAGE_NAME}}/evals/governance.json`
+   during setup, then add `--require-ready` to release CI after the governed suites and frozen
+   contracts exist.
+7. Run `python -m unittest {{PACKAGE_NAME}}.tests.test_provider_factory` and the base
    `scripts/check.ps1` before every integration.
 
 The base contracts described in `docs/customization.md` and `docs/provider-conformance.md` remain

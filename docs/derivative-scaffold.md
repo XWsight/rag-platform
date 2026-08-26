@@ -22,7 +22,7 @@ python scripts\init_derivative.py `
 - 可直接运行的 `api_app.py` 和 `local_app.py` 组合根；
 - 不访问外网的 Provider 工厂回归测试；
 - 产品展示配置覆盖示例；
-- 领域评测数据与治理说明。
+- 领域评测治理记录：生成时为 `draft`，不会伪造领域基线。
 - `UPSTREAM.md`：生成时自动记录的基座 Git 提交，供后续同步和回滚审查。
 
 脚手架先在同一父目录的临时路径渲染并校验模板，完成后才发布目标目录；渲染异常不会留下可被误提交的半成品派生层。
@@ -41,6 +41,18 @@ python scripts\init_derivative.py `
 4. 再增加行业路由、审批或 UI；这些能力必须在派生层实现，而不是修改基座的证据与租户边界。
 5. 每次同步上游前后都运行完整 `scripts/check.ps1` 和你的领域评测；记录基座 commit、数据摘要、
    指标和回滚方式。
+
+## 领域评测发布门禁
+
+生成的 `evals/governance.json` 记录评测负责人、数据敏感级别、基座提交、独立检索/回答 suite 路径
+和 held-out test 状态。它初始为 `draft`；在没有真实领域语料前不应改为 `ready`。准备发布时运行：
+
+```powershell
+python scripts\validate_derivative_evaluation.py legal_assistant\evals\governance.json --require-ready
+```
+
+`ready` 状态会要求两个 suite 都有冻结 contract 和未消费的 test split。用 test 数据调参后必须标记
+`consumed`，补充新的独立测试集并重新冻结 contract，不能继续把已经参与调试的数据包装成盲测。
 
 脚手架本身不是新的部署模式：派生项目仍默认使用 durable single-node 约束。达到规模边界后，
 应按基座部署文档把状态逐项外置，而不是通过复制单机容器获得多副本能力。

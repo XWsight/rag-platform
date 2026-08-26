@@ -11,3 +11,15 @@ prompts, or provider behavior, create and review:
 Record data provenance, review owner, sensitivity classification, and the exact base commit used.
 Never commit customer documents, API keys, provider responses containing sensitive text, or exported
 production conversations.
+
+`governance.json` is the release-facing record. It begins as `draft` so a generated layer cannot
+pretend to have a validated domain baseline. Change it to `ready` only after its retrieval and answer
+suite paths point to real source-isolated suites with frozen contracts. Release CI should run:
+
+```powershell
+python scripts\validate_derivative_evaluation.py <package>\evals\governance.json --require-ready
+```
+
+The validator rejects escaped paths, missing test splits, changed frozen contracts, and a test split
+marked as consumed. Once a held-out set is used for debugging, mark it `consumed`, replace it with a
+newly reviewed held-out set, and freeze new contracts before another release.
