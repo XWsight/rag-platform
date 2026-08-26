@@ -331,6 +331,7 @@ class PlatformTests(unittest.TestCase):
                     "planning_error": "ProviderProtocolError",
                     "web_error": "ProviderUnavailableError",
                     "web_error_count": 2,
+                    "web_error_counts": "ProviderRateLimitError:1,ProviderUnavailableError:1",
                 },
             )
 
@@ -352,7 +353,11 @@ class PlatformTests(unittest.TestCase):
             rendered,
         )
         self.assertIn(
-            'provider="web_search",operation="search",error_type="unavailable"} 2',
+            'provider="web_search",operation="search",error_type="rate_limit"} 1',
+            rendered,
+        )
+        self.assertIn(
+            'provider="web_search",operation="search",error_type="unavailable"} 1',
             rendered,
         )
         self.assertNotIn("provider failed", rendered)

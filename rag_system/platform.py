@@ -360,12 +360,43 @@ class RagPlatform:
                 provider="chat",
                 operation="plan",
             )
-        self._record_external_call_failure(
-            diagnostics.get("web_error"),
-            provider="web_search",
-            operation="search",
-            count=diagnostics.get("web_error_count"),
-        )
+        web_errors = self._parse_error_counts(diagnostics.get("web_error_counts"))
+        if web_errors:
+            for error_name, count in web_errors:
+                self._record_external_call_failure(
+                    error_name,
+                    provider="web_search",
+                    operation="search",
+                    count=count,
+                )
+        else:
+            self._record_external_call_failure(
+                diagnostics.get("web_error"),
+                provider="web_search",
+                operation="search",
+                count=diagnostics.get("web_error_count"),
+            )
+
+    def _parse_error_counts(self, encoded: object) -> tuple[tuple[str, int], ...]:
+        """Parse bounded service diagnostics without trusting arbitrary adapters."""
+
+        if not isinstance(encoded, str) or not encoded or len(encoded) > 256:
+            return ()
+        remaining = self.settings.research_max_web_queries
+        parsed: list[tuple[str, int]] = []
+        for item in encoded.split(","):
+            error_name, separator, raw_count = item.partition(":")
+            if not separator or not error_name or not raw_count.isdecimal():
+                return ()
+            count = int(raw_count)
+            if count < 1:
+                return ()
+            bounded_count = min(count, remaining)
+            parsed.append((error_name, bounded_count))
+            remaining -= bounded_count
+            if remaining == 0:
+                break
+        return tuple(parsed)
 
     def _record_external_call_failure(
         self,

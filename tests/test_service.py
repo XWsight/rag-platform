@@ -243,7 +243,32 @@ class RagServiceTests(unittest.TestCase):
         self.assertEqual(
             result.diagnostics["web_error_count"], service.settings.research_max_web_queries
         )
+        self.assertEqual(
+            result.diagnostics["web_error_counts"],
+            f"ProviderUnavailableError:{service.settings.research_max_web_queries}",
+        )
         self.assertNotIn("network details", str(result.diagnostics))
+
+    def test_provider_failure_retains_preceding_web_failure_diagnostics(self) -> None:
+        service, _, web = self.build_service(
+            make_hit(0.9),
+            chat=FakeChat(error=ProviderUnavailableError("chat unavailable")),
+            web=FakeWeb(error=ProviderUnavailableError("web unavailable")),
+            planner=FakePlanner(("查询一",)),
+        )
+        result = service.answer(
+            "idx",
+            AnswerRequest("复杂问题", "session", True, True, True),
+        )
+
+        self.assertEqual(result.decision.route, Route.ERROR)
+        self.assertEqual(result.diagnostics["provider_error"], "ProviderUnavailableError")
+        self.assertEqual(result.diagnostics["web_error"], "ProviderUnavailableError")
+        self.assertEqual(result.diagnostics["web_error_count"], web.calls)
+        self.assertEqual(
+            result.diagnostics["web_error_counts"],
+            f"ProviderUnavailableError:{web.calls}",
+        )
 
 
 if __name__ == "__main__":

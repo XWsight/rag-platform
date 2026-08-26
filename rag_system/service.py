@@ -136,6 +136,7 @@ class RagService:
         citations, evidence = self._local_evidence(selected_hits)
         web_error = ""
         web_error_count = 0
+        web_errors: dict[str, int] = {}
         web_domain_count = 0
         web_query_count = 0
 
@@ -158,6 +159,7 @@ class RagService:
                     except (ProviderError, ValueError) as error:
                         web_error = type(error).__name__
                         web_error_count += 1
+                        web_errors[web_error] = web_errors.get(web_error, 0) + 1
                 web_results = tuple(web_results_list)
                 web_citations, web_evidence, web_domain_count = self._web_evidence(
                     question, web_results
@@ -180,6 +182,7 @@ class RagService:
                 diagnostics={
                     "web_error": web_error,
                     "web_error_count": web_error_count,
+                    "web_error_counts": self._error_counts_diagnostic(web_errors),
                     "evidence_count": 0,
                     "history_turns": history_turns,
                     "planned_query_count": len(query_plan),
@@ -222,6 +225,9 @@ class RagService:
                         "history_turns": history_turns,
                         "planned_query_count": len(query_plan),
                         "planning_error": planning_error,
+                        "web_error": web_error,
+                        "web_error_count": web_error_count,
+                        "web_error_counts": self._error_counts_diagnostic(web_errors),
                         "web_query_count": web_query_count,
                     },
                 )
@@ -243,6 +249,7 @@ class RagService:
                 "citation_completeness": 1.0 if claims else 0.0,
                 "web_error": web_error,
                 "web_error_count": web_error_count,
+                "web_error_counts": self._error_counts_diagnostic(web_errors),
                 "web_domain_count": web_domain_count,
                 "history_turns": history_turns,
                 "planned_query_count": len(query_plan),
@@ -300,6 +307,16 @@ class RagService:
             for index, query in enumerate(queries, start=1)
         }
         return fuse_query_hits(rankings, top_k=self.settings.final_evidence_count)
+
+    @staticmethod
+    def _error_counts_diagnostic(error_counts: dict[str, int]) -> str:
+        """Return a content-free, deterministic error-count representation."""
+
+        return ",".join(
+            f"{error_name}:{count}"
+            for error_name, count in sorted(error_counts.items())
+            if count > 0
+        )
 
     def _retrieval_query(self, session_id: str, question: str) -> str:
         """Add recent user questions without trusting prior generated answers."""
