@@ -7,7 +7,7 @@ import logging
 import math
 import re
 import time
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Annotated, Literal
 
@@ -45,7 +45,8 @@ from rag_system.api_errors import (
     classify_application_error,
     classify_http_error,
 )
-from rag_system.application import RagApplication, UploadDocument
+from rag_system.application import RagApplication
+from rag_system.api_uploads import read_uploads as _read_uploads
 from rag_system.domain import AnswerRequest
 from rag_system.observability import JsonEventLogger, TraceContext
 from rag_system.rate_limit import RateLimitDecision, TokenBucketRateLimiter
@@ -59,7 +60,6 @@ from rag_system.web_ui import mount_web_ui
 
 
 _IDENTIFIER_PATTERN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9._:-]{0,127})?")
-_UPLOAD_READ_SIZE = 64 * 1024
 _PROMETHEUS_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
 
 
@@ -578,39 +578,6 @@ def create_app(
         return Response(payload, headers={"Content-Type": _PROMETHEUS_CONTENT_TYPE})
 
     return app
-
-
-async def _read_uploads(
-    files: Sequence[UploadFile],
-    *,
-    max_file_bytes: int,
-    max_total_bytes: int,
-) -> tuple[UploadDocument, ...]:
-    uploads: list[UploadDocument] = []
-    total = 0
-    try:
-        for upload in files:
-            filename = upload.filename
-            if not isinstance(filename, str) or not filename.strip():
-                raise ApiBoundaryError(422, "invalid_request", "The request could not be validated.")
-            content = bytearray()
-            while True:
-                block = await upload.read(_UPLOAD_READ_SIZE)
-                if not block:
-                    break
-                if len(content) + len(block) > max_file_bytes or total + len(block) > max_total_bytes:
-                    raise ApiBoundaryError(
-                        413,
-                        "upload_limit_exceeded",
-                        "The upload exceeds the configured limits.",
-                    )
-                content.extend(block)
-                total += len(block)
-            uploads.append(UploadDocument(display_name=filename, source=bytes(content)))
-    finally:
-        for upload in files:
-            await upload.close()
-    return tuple(uploads)
 
 
 def _multipart_body_limit(max_total_bytes: int, max_documents: int) -> int:
