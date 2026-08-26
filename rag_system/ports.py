@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from rag_system.domain import (
     Chunk,
@@ -48,6 +48,7 @@ class IndexRepository(Protocol):
     def healthcheck(self) -> bool: ...
 
 
+@runtime_checkable
 class ChatModel(Protocol):
     @property
     def available(self) -> bool: ...
@@ -59,6 +60,7 @@ class ChatModel(Protocol):
     ) -> GeneratedAnswer: ...
 
 
+@runtime_checkable
 class WebSearchProvider(Protocol):
     @property
     def available(self) -> bool: ...
@@ -66,6 +68,7 @@ class WebSearchProvider(Protocol):
     def search(self, query: str, *, count: int) -> Sequence[WebSearchResult]: ...
 
 
+@runtime_checkable
 class QueryPlanner(Protocol):
     @property
     def available(self) -> bool: ...

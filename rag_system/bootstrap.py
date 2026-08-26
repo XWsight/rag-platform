@@ -30,7 +30,7 @@ from rag_system.health import HealthProbe, ReadinessMonitor
 from rag_system.metrics import create_operational_metrics
 from rag_system.observability import JsonEventLogger
 from rag_system.platform import RagPlatform
-from rag_system.provider_factory import ProviderFactory
+from rag_system.provider_factory import ProviderFactory, create_provider_bundle
 from rag_system.providers import ZhipuProviderFactory
 from rag_system.rate_limit import TokenBucketRateLimiter
 from rag_system.retrieval import LocalVectorIndexRepository
@@ -165,7 +165,8 @@ def build_service_from_settings(
     validated = settings.validate()
     repository = LocalVectorIndexRepository(validated)
     manager = IndexManager(validated, repository)
-    providers = (provider_factory or ZhipuProviderFactory()).create(validated)
+    factory = provider_factory or ZhipuProviderFactory()
+    providers = create_provider_bundle(factory, validated)
     return RagService(
         settings=validated,
         index_manager=manager,
