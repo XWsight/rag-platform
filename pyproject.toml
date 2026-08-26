@@ -55,6 +55,7 @@ files = [
   "rag_system/answer_analysis.py",
   "rag_system/answer_benchmark.py",
   "rag_system/answer_suite.py",
+  "rag_system/answer_workflow.py",
   "rag_system/assets.py",
   "rag_system/benchmark_suite.py",
   "rag_system/bootstrap.py",

@@ -37,7 +37,8 @@ HTTP 入口不提供 TLS；公网部署必须使用受控反向代理。上传�
 | [`application.py`](../rag_system/application.py) | 向 HTTP、CLI、后台入口和未来 Agent 暴露框架无关的用例端口、提交 DTO 与稳定应用错误 | FastAPI、SQLite、向量后端或供应商实现 |
 | [`api.py`](../rag_system/api.py)、[`api_contract.py`](../rag_system/api_contract.py)、[`api_errors.py`](../rag_system/api_errors.py) | API Key/Bearer 接入、角色检查、版本化 wire schema、上传读取、租户限流、集中错误分类、安全响应头、健康检查和 `/metrics` | 文档解析、索引算法、业务状态迁移或具体平台实现 |
 | [`tenancy.py`](../rag_system/tenancy.py) | `Principal`、`TenantId`、仅保存摘要的 API Key 校验和非枚举式拒绝 | 密钥签发、在线撤销、组织级 IAM |
-| [`platform.py`](../rag_system/platform.py) | 应用门面：知识库生命周期、幂等创建、任务提交、重启恢复、租户化索引与会话标识的用例编排 | HTTP 协议、文档内容校验细节和索引状态机细节 |
+| [`platform.py`](../rag_system/platform.py) | 应用门面：知识库生命周期、幂等创建、任务提交与重启恢复的用例编排 | HTTP 协议、文档内容校验细节、索引状态机和问答执行细节 |
+| [`answer_workflow.py`](../rag_system/answer_workflow.py) | 有界问答、索引懒恢复、会话三重隔离与脱敏 Provider 失败指标 | HTTP 协议、具体 Provider、文档生命周期变更 |
 | [`submission.py`](../rag_system/submission.py)、[`coordination.py`](../rag_system/coordination.py) | 上传的有界物化与稳定摘要、文档 ID 策略、确定性分片锁和一致的双向 resource-job 登记 | 文件持久化、任务执行和 HTTP multipart 解析 |
 | [`assets.py`](../rag_system/assets.py)、[`indexing.py`](../rag_system/indexing.py) | Catalog 清单与文件结果核对、路径/哈希完整性、耐久索引状态迁移、取消收敛和失败补偿 | API 鉴权、问答路由或供应商调用 |
 | [`catalog.py`](../rag_system/catalog.py) | SQLite schema v4 中租户范围的知识库状态机、显式上传准备阶段、耐久取消意图与不可变文档清单 | 文档正文、向量或耐久任务执行日志 |

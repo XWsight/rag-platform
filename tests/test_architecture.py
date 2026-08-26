@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FRAMEWORK_NEUTRAL_MODULES = (
     "rag_system/application.py",
     "rag_system/application_ports.py",
+    "rag_system/answer_workflow.py",
     "rag_system/domain.py",
     "rag_system/ports.py",
     "rag_system/grounding.py",
