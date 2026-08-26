@@ -48,6 +48,11 @@ from rag_system.api_errors import (
 from rag_system.application import RagApplication
 from rag_system.api_uploads import read_uploads as _read_uploads
 from rag_system.domain import AnswerRequest
+from rag_system.api_responses import (
+    context_from_request as _context_from_request,
+    error_response as _error_response,
+    new_request_context as _request_context,
+)
 from rag_system.observability import JsonEventLogger, TraceContext
 from rag_system.rate_limit import RateLimitDecision, TokenBucketRateLimiter
 from rag_system.tenancy import (
@@ -59,7 +64,6 @@ from rag_system.api_openapi import install_multipart_openapi_schema
 from rag_system.web_ui import mount_web_ui
 
 
-_IDENTIFIER_PATTERN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9._:-]{0,127})?")
 _PROMETHEUS_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
 
 
@@ -636,24 +640,6 @@ def _install_receive_limit(request: Request, body_limit: int) -> None:
     request._receive = limited_receive
 
 
-def _request_context(request: Request) -> TraceContext:
-    trace_id = _safe_incoming_identifier(request.headers.get("X-Trace-ID"))
-    request_id = _safe_incoming_identifier(request.headers.get("X-Request-ID"))
-    return TraceContext.new(trace_id=trace_id, request_id=request_id)
-
-
-def _safe_incoming_identifier(value: str | None) -> str | None:
-    if value is None:
-        return None
-    normalized = value.strip()
-    return normalized if _IDENTIFIER_PATTERN.fullmatch(normalized) is not None else None
-
-
-def _context_from_request(request: Request) -> TraceContext:
-    context = getattr(request.state, "trace_context", None)
-    return context if isinstance(context, TraceContext) else TraceContext.new()
-
-
 def _raw_headers(request: Request) -> tuple[tuple[str, str], ...]:
     result: list[tuple[str, str]] = []
     for name, value in request.scope.get("headers", ()):
@@ -689,35 +675,6 @@ def _decode_knowledge_base_cursor(cursor: str) -> tuple[float, str]:
     ):
         raise ApiBoundaryError(422, "invalid_request", "Knowledge base cursor is invalid.")
     return float(value[0]), value[1]
-
-
-def _error_response(
-    request: Request,
-    *,
-    status_code: int,
-    code: str,
-    message: str,
-    headers: dict[str, str] | None = None,
-) -> JSONResponse:
-    context = _context_from_request(request)
-    envelope = ErrorEnvelope(
-        error=ErrorDetail(
-            code=code,
-            message=message,
-            trace_id=context.trace_id,
-            request_id=context.request_id,
-        )
-    )
-    safe_headers = {
-        "Cache-Control": "no-store",
-        "X-Content-Type-Options": "nosniff",
-        "X-Trace-ID": context.trace_id,
-        "X-Request-ID": context.request_id,
-        **dict(headers or {}),
-    }
-    if status_code == 401:
-        safe_headers.setdefault("WWW-Authenticate", "Bearer")
-    return JSONResponse(status_code=status_code, content=envelope.model_dump(mode="json"), headers=safe_headers)
 
 
 def _operation_for(method: str, path: str) -> str:
