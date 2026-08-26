@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts.audit_dependencies import (
     AuditFinding,
@@ -12,6 +14,7 @@ from scripts.audit_dependencies import (
     build_command,
     evaluate_findings,
     load_policy,
+    run_audit,
 )
 
 
@@ -120,6 +123,16 @@ class DependencyAuditPolicyTests(unittest.TestCase):
             errors = evaluate_findings(exceptions, (finding,))
             self.assertTrue(any("unapproved vulnerability" in error for error in errors))
             self.assertTrue(any("stale dependency exception" in error for error in errors))
+
+    def test_network_timeout_fails_the_audit_without_hanging(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            policy, requirements = self._write_fixture(directory)
+            exceptions = load_policy(policy, requirements, today=date(2026, 8, 11))
+            with patch(
+                "scripts.audit_dependencies.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(("pip-audit",), 45),
+            ):
+                self.assertEqual(run_audit(requirements, exceptions), 2)
 
 
 if __name__ == "__main__":

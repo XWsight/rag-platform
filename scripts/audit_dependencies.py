@@ -18,6 +18,7 @@ DEFAULT_REQUIREMENTS = PROJECT_ROOT / "requirements.txt"
 DEFAULT_POLICY = PROJECT_ROOT / "security" / "dependency-exceptions.json"
 _MAX_POLICY_BYTES = 64 * 1024
 _MAX_EXCEPTIONS = 16
+_AUDIT_TIMEOUT_SECONDS = 45
 _VULNERABILITY_ID = re.compile(r"(?:PYSEC-\d{4}-\d+|CVE-\d{4}-\d+|GHSA-[a-z0-9-]+)")
 _PACKAGE_NAME = re.compile(r"[a-z0-9]+(?:[-_.][a-z0-9]+)*")
 _VERSION = re.compile(r"[A-Za-z0-9]+(?:[A-Za-z0-9._+-]*[A-Za-z0-9])?")
@@ -324,13 +325,21 @@ def run_audit(
     requirements_path: Path,
     exceptions: tuple[DependencyException, ...],
 ) -> int:
-    completed = subprocess.run(
-        build_command(requirements_path),
-        cwd=PROJECT_ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        completed = subprocess.run(
+            build_command(requirements_path),
+            cwd=PROJECT_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=_AUDIT_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        print(
+            f"dependency audit timed out after {_AUDIT_TIMEOUT_SECONDS} seconds",
+            file=sys.stderr,
+        )
+        return 2
     if completed.returncode not in {0, 1}:
         if completed.stdout:
             print(completed.stdout, file=sys.stderr, end="")

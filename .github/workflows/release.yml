@@ -1,0 +1,44 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  publish-release-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Require stable package version and matching tag
+        run: python scripts/verify_release.py --tag "${GITHUB_REF_NAME}"
+      - name: Install declared runtime dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Generate SPDX dependency inventory
+        run: >-
+          python scripts/generate_runtime_sbom.py
+          --requirements requirements.txt
+          --output reports/runtime-sbom.spdx.json
+      - name: Generate release-input manifest
+        run: >-
+          python scripts/release_manifest.py
+          --require-clean
+          --json-output reports/release-manifest.json
+      - name: Create GitHub release with review artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "${GITHUB_REF_NAME}"
+          reports/runtime-sbom.spdx.json
+          reports/release-manifest.json
+          --generate-notes
+          --title "RAG Studio ${GITHUB_REF_NAME}"

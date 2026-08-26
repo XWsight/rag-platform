@@ -8,6 +8,9 @@
 
 它同时是一个可派生的通用基座：产品名称、展示语和运行配置可在不修改 API 契约的前提下调整；行业特有的模型、数据、规则和 UI 应通过明确端口与独立评测集扩展。完整流程见[派生项目定制指南](docs/customization.md)。
 
+准备首个真实领域试点时，请遵循[派生项目试点清单](docs/derivative-pilot.md)：项目提供评测和交付门禁，
+但不会用仓库内通用样例伪造领域质量结论。
+
 要在 fork 或副本中创建可同步上游的行业扩展层，可运行 `python scripts\init_derivative.py --help`；脚手架会在临时环境中通过真实 API 装配回归验证。用法与生成内容见[派生项目脚手架](docs/derivative-scaffold.md)。
 
 模型与联网搜索适配器通过受校验的 `ProviderFactory` 注入；替换默认实现时，请同时遵循[提供商适配器一致性](docs/provider-conformance.md)，以保持启动失败关闭、引用边界和错误脱敏契约。

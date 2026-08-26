@@ -86,6 +86,14 @@ curl --fail http://127.0.0.1:8000/health/ready
 
 PowerShell 中可用 `Get-FileHash -Algorithm SHA256 <文件>` 校验，并用 `$env:RAG_DATA_VOLUME='rag-studio-data-restore'` 设置本次 Compose 进程的卷名。
 
+### 最小故障演练周期
+
+每个候选发布至少记录一次可复核的非生产演练：启动恢复、被中断的索引快照收敛、隔离卷恢复、租户边界
+只读抽查，以及磁盘/权限告警路径。CI 的 `recovery-and-durability` job 覆盖这些状态机的确定性回归，
+容器烟测覆盖空卷备份恢复；两者都不能替代真实语料和真实权限环境的演练。记录演练时至少保存：源码
+revision、镜像 digest、输入数据分类、开始/结束时间、RTO、结果、失败项与回滚结论；不要把文档正文、
+API Key 或客户标识写入演练报告。
+
 ## 升级与回滚
 
 单节点不适用滚动升级，因为没有第二个可接管流量的安全写入副本。标准流程会产生短暂停机：

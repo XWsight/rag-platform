@@ -36,6 +36,10 @@
    docker compose build --pull
    ```
 
+   Windows Docker Desktop 使用者可先运行 `python scripts/docker_preflight.py --compose`。该检查只验证
+   Docker Engine、`.env` 和 Compose 解析，不会构建或启动容器。若报 `dockerDesktopLinuxEngine` 不可用，
+   这是 Docker Desktop/WSL 环境故障；先修复引擎，再判断项目构建结果。
+
 4. 启动并验证：
 
    ```bash
@@ -91,6 +95,11 @@ docker image inspect rag-studio:2026.08.11-1 --format '{{json .RepoDigests}}'
 正式环境应记录代码提交、镜像 digest、配置版本、数据快照和部署时间。输出为 `[]` 或 `null` 表示镜像尚未推送到仓库，此时不能声称它是可跨主机验证的不可变制品。
 
 仓库 CI 还会保存 `release-manifest-<commit>` 工件，其中记录干净源码提交、包版本及 Dockerfile、Compose、`pyproject.toml`、运行/开发依赖清单的 SHA-256。该清单不读取 `.env`，适合把一次镜像构建关联到其受控输入；它不替代镜像签名、SBOM 或传递依赖哈希锁定。
+
+推送与稳定 `pyproject.toml` 版本完全一致的 `v<version>` Git tag 后，`release` workflow 会附上 SPDX
+SBOM 与 release manifest 并创建 GitHub Release。当前开发版本带 `.dev`，因此会被工作流拒绝，避免把开发
+快照误标为正式发行。此流程不伪造镜像签名；选定 GHCR 或其他仓库、并配置 OIDC/KMS 或可信签名身份后，
+再把签名和 provenance attestation 作为独立发布门禁加入。
 
 ## 反向代理
 
