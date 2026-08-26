@@ -1,5 +1,5 @@
 fastapi==0.141.1
-gradio==6.22.0
+gradio==6.25.0
 langchain-huggingface==1.2.2
 pypdf==6.15.0
 python-dotenv==1.2.2
