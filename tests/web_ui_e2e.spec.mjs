@@ -95,3 +95,20 @@ test("the workbench only uses its current per-tab session key", async ({page}) =
   await authenticatedList;
   await expect.poll(() => page.evaluate(() => window.sessionStorage.getItem("rag-platform-api-key"))).toBe(API_KEY);
 });
+
+test("a user can create, publish, inspect, and run a versioned application", async ({page}) => {
+  await connect(page);
+  await createReadyKnowledgeBase(page);
+  await page.getByRole("link", {name: "应用管理"}).click();
+  await expect(page.getByRole("heading", {name: "AI 应用管理"})).toBeVisible();
+  await expect(page.locator("#platform-status")).toHaveText("已连接");
+  await page.getByLabel("应用名称").fill("浏览器知识应用");
+  await page.getByRole("button", {name: "创建并发布"}).click();
+  await expect(page.locator("#application-list")).toContainText("浏览器知识应用");
+  await expect(page.locator("#application-list")).toContainText("已发布 · 1 个版本");
+  await page.locator("#application-question").fill("RAG 如何工作？");
+  await page.getByRole("button", {name: "运行应用"}).click();
+  await expect(page.locator("#application-answer")).toContainText("RAG retrieves evidence");
+  await expect(page.locator("#application-answer")).toContainText("Revision: rev_");
+  await expect(page.locator("#application-answer")).toContainText("Trace: trace_");
+});

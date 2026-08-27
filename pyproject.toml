@@ -86,6 +86,7 @@ ignore_missing_imports = true
 module = [
   "rag_system.api",
   "rag_system.api_answer_routes",
+  "rag_system.api_application_routes",
   "rag_system.api_error_handlers",
   "rag_system.api_request_context",
   "rag_system.api_resource_routes",

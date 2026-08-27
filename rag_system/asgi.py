@@ -14,4 +14,6 @@ app = create_app(
     logger=runtime.event_logger,
     readiness=runtime.ready,
     shutdown=runtime.close,
+    application_service=runtime.application_service,
+    application_runtime=runtime.application_runtime,
 )

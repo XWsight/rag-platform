@@ -12,6 +12,9 @@ from pathlib import Path
 from typing import Any, BinaryIO
 
 from rag_system.application import RagApplication
+from rag_system.application_runtime import KnowledgeApplicationRuntime
+from rag_system.application_service import ApplicationService
+from rag_system.application_store import ApplicationStore
 from rag_system.config import SecretValue, Settings, load_settings
 from rag_system.health import HealthProbe, ReadinessMonitor
 from rag_system.local_durable import (
@@ -41,6 +44,8 @@ class ProductionRuntime:
     event_logger: JsonEventLogger
     storage_lease: StorageRootLease
     readiness: ReadinessMonitor
+    application_service: ApplicationService
+    application_runtime: KnowledgeApplicationRuntime
 
     def close(self) -> None:
         try:
@@ -99,8 +104,7 @@ class StorageRootLease:
             if (
                 not stat.S_ISREG(handle_stat.st_mode)
                 or stat.S_ISLNK(path_stat.st_mode)
-                or (handle_stat.st_dev, handle_stat.st_ino)
-                != (path_stat.st_dev, path_stat.st_ino)
+                or (handle_stat.st_dev, handle_stat.st_ino) != (path_stat.st_dev, path_stat.st_ino)
             ):
                 raise OSError("unsafe storage lease inode")
             handle.seek(0)
@@ -124,7 +128,11 @@ class StorageRootLease:
                 flock = getattr(fcntl, "flock", None)
                 lock_ex = getattr(fcntl, "LOCK_EX", None)
                 lock_nb = getattr(fcntl, "LOCK_NB", None)
-                if not callable(flock) or not isinstance(lock_ex, int) or not isinstance(lock_nb, int):
+                if (
+                    not callable(flock)
+                    or not isinstance(lock_ex, int)
+                    or not isinstance(lock_nb, int)
+                ):
                     raise OSError("file locking is unavailable")
                 flock(handle.fileno(), lock_ex | lock_nb)
         except OSError:
@@ -317,6 +325,9 @@ def build_production_runtime(
             idempotency=components.idempotency,
             metrics=metrics,
         )
+        application_store = ApplicationStore(storage_root / "applications.sqlite3")
+        application_service = ApplicationService(application_store, components.catalog)
+        application_runtime = KnowledgeApplicationRuntime(application_store, platform)
         rate_limiter = TokenBucketRateLimiter(
             rate_per_second=settings.rate_limit_per_second,
             capacity=settings.rate_limit_capacity,
@@ -328,7 +339,17 @@ def build_production_runtime(
             known_secrets=(settings.api_key.reveal(),),
         )
         platform.recover_incomplete(principals)
-        readiness = ReadinessMonitor(profile.readiness_probes(components, principals))
+        readiness = ReadinessMonitor(
+            (
+                *profile.readiness_probes(components, principals),
+                HealthProbe(
+                    "applications",
+                    lambda: bool(
+                        application_store.list_projects(principals[0], limit=1) is not None
+                    ),
+                ),
+            )
+        )
     except Exception:
         try:
             if platform is not None:
@@ -357,6 +378,8 @@ def build_production_runtime(
         event_logger=event_logger,
         storage_lease=storage_lease,
         readiness=readiness,
+        application_service=application_service,
+        application_runtime=application_runtime,
     )
 
 

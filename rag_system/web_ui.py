@@ -33,8 +33,9 @@ def mount_web_ui(app: FastAPI, *, product_name: str, product_tagline: str) -> No
     """Mount the packaged browser client without changing the API boundary."""
 
     index_file = _WEB_ROOT / "index.html"
+    platform_file = _WEB_ROOT / "platform.html"
     assets = _WEB_ROOT / "assets"
-    if not index_file.is_file() or not assets.is_dir():
+    if not index_file.is_file() or not platform_file.is_file() or not assets.is_dir():
         raise RuntimeError("packaged web interface assets are unavailable")
 
     @app.get("/", include_in_schema=False)
@@ -49,6 +50,10 @@ def mount_web_ui(app: FastAPI, *, product_name: str, product_tagline: str) -> No
             media_type="text/html",
             headers=_APP_SECURITY_HEADERS,
         )
+
+    @app.get("/app/platform", include_in_schema=False)
+    def platform_app() -> FileResponse:
+        return FileResponse(platform_file, media_type="text/html", headers=_APP_SECURITY_HEADERS)
 
     @app.get("/app/config", include_in_schema=False)
     def product_configuration() -> JSONResponse:

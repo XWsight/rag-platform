@@ -8,6 +8,7 @@ from starlette.concurrency import run_in_threadpool
 
 from rag_system import __version__
 from rag_system.api_answer_routes import register_answer_routes
+from rag_system.api_application_routes import register_application_routes
 from rag_system.api_contract import (
     AnswerPayload,
     AnswerResponse,
@@ -27,6 +28,8 @@ from rag_system.api_request_context import install_request_context_middleware, o
 from rag_system.api_resource_routes import register_resource_routes
 from rag_system.api_security import build_api_security_dependencies
 from rag_system.application import RagApplication
+from rag_system.application_runtime import KnowledgeApplicationRuntime
+from rag_system.application_service import ApplicationService
 from rag_system.observability import JsonEventLogger
 from rag_system.rate_limit import TokenBucketRateLimiter
 from rag_system.tenancy import ApiKeyAuthenticator
@@ -51,6 +54,8 @@ def create_app(
     readiness: ReadinessCheck | bool | None = None,
     shutdown: Callable[[], None] | None = None,
     close_on_shutdown: bool = True,
+    application_runtime: KnowledgeApplicationRuntime | None = None,
+    application_service: ApplicationService | None = None,
 ) -> FastAPI:
     """Build an isolated FastAPI application from explicit dependencies."""
 
@@ -112,6 +117,17 @@ def create_app(
         security=security,
         error_responses=_error_responses,
     )
+    if (application_runtime is None) != (application_service is None):
+        raise TypeError("application_runtime and application_service must be provided together")
+    if application_runtime is not None and application_service is not None:
+        register_application_routes(
+            app,
+            runtime=application_runtime,
+            service=application_service,
+            settings=settings,
+            security=security,
+            error_responses=_error_responses,
+        )
     return app
 
 

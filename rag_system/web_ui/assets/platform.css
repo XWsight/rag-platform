@@ -1,0 +1,19 @@
+.platform-page { min-height: 100vh; background: var(--canvas); }
+.platform-shell { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 40px 0 70px; }
+.platform-header, .platform-card-title, .connection-card { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.platform-header { margin-bottom: 24px; }
+.platform-header h1, .platform-card h2 { margin: 0 0 8px; }
+.platform-header p:last-child { color: var(--muted); }
+.platform-grid { display: grid; grid-template-columns: minmax(280px, .8fr) minmax(360px, 1.2fr); gap: 18px; margin: 18px 0; }
+.platform-card { padding: 24px; border: 1px solid var(--line); border-radius: 20px; background: #fff; box-shadow: 0 12px 35px rgba(25,49,41,.07); }
+.platform-card label { display: block; margin: 14px 0 7px; font-size: 12px; font-weight: 750; }
+.platform-card input:not([type="checkbox"]), .platform-card select { width: 100%; padding: 11px 12px; border: 1px solid #ccd7d1; border-radius: 10px; background: #fff; }
+.platform-card .primary-button { margin-top: 16px; }
+.connection-card input { flex: 1; }
+.application-list { display: grid; gap: 10px; margin-top: 14px; }
+.application-entry { padding: 14px; border: 1px solid var(--line); border-radius: 13px; background: var(--canvas); }
+.application-entry strong, .application-entry small { display: block; }
+.application-entry small { margin-top: 5px; color: var(--muted); }
+.application-entry button { margin-top: 9px; }
+#application-answer { min-height: 72px; padding: 14px; white-space: pre-wrap; border-radius: 12px; background: var(--ink); color: #e8fff2; }
+@media (max-width: 760px) { .platform-grid { grid-template-columns: 1fr; } .platform-header, .connection-card { align-items: stretch; flex-direction: column; } }

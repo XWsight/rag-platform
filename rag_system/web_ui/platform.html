@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>AI 应用管理</title>
+    <link rel="stylesheet" href="/app/assets/styles.css">
+    <link rel="stylesheet" href="/app/assets/platform.css">
+    <script src="/app/assets/platform.js" defer></script>
+  </head>
+  <body class="platform-page">
+    <main class="platform-shell">
+      <header class="platform-header">
+        <div><p class="eyebrow">Platform Kernel</p><h1>AI 应用管理</h1><p>创建、版本化、发布和回滚知识应用。</p></div>
+        <a class="secondary-button" href="/app">返回知识工作台</a>
+      </header>
+      <section class="platform-card connection-card">
+        <label for="platform-key">API Key</label>
+        <input id="platform-key" type="password" autocomplete="off" placeholder="当前标签页访问密钥">
+        <button class="secondary-button" id="load-apps" type="button">连接并刷新</button>
+        <span id="platform-status" role="status"></span>
+      </section>
+      <section class="platform-grid">
+        <form class="platform-card" id="application-form">
+          <p class="eyebrow">新应用</p><h2>发布知识应用</h2>
+          <label for="application-name">应用名称</label>
+          <input id="application-name" maxlength="200" required value="Support assistant">
+          <label for="application-kb">绑定知识库</label>
+          <select id="application-kb" required></select>
+          <label class="mode-toggle"><input id="application-cloud" type="checkbox"><span>允许云端生成</span></label>
+          <button class="primary-button" type="submit">创建并发布</button>
+          <p class="field-error" id="application-error" role="alert"></p>
+        </form>
+        <section class="platform-card">
+          <div class="platform-card-title"><div><p class="eyebrow">Production</p><h2>应用与版本</h2></div><button class="icon-button" id="refresh-apps" aria-label="刷新应用">↻</button></div>
+          <div id="application-list" class="application-list"></div>
+        </section>
+      </section>
+      <form class="platform-card" id="application-answer-form">
+        <p class="eyebrow">运行验证</p><h2>通过已发布应用问答</h2>
+        <select id="answer-application" required></select>
+        <input id="application-question" required maxlength="2000" placeholder="输入问题">
+        <button class="primary-button" type="submit">运行应用</button>
+        <pre id="application-answer"></pre>
+      </form>
+    </main>
+  </body>
+</html>
