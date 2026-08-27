@@ -75,13 +75,13 @@ class ApplicationStoreTests(unittest.TestCase):
         )
 
     def revision_and_binding(
-        self, application: Application, *, suffix: str = "1"
+        self, application: Application, *, suffix: str = "1", revision_number: int = 1
     ) -> tuple[ApplicationRevision, ResourceBinding]:
         knowledge_base_id = identifier("kb", suffix)
         revision = ApplicationRevision(
             revision_id=identifier("rev", suffix),
             application_id=application.application_id,
-            revision_number=1,
+            revision_number=revision_number,
             configuration_schema_version=APPLICATION_CONFIGURATION_SCHEMA_VERSION,
             configuration=KnowledgeChatConfiguration(knowledge_base_ids=(knowledge_base_id,)),
             created_at=3.0,
@@ -216,6 +216,65 @@ class ApplicationStoreTests(unittest.TestCase):
                     "AND name = 'idx_revisions_application_number'"
                 ).fetchone()
             )
+
+    def test_publish_is_atomic_when_deployment_or_audit_persistence_fails(self) -> None:
+        project = self.store.create_project(self.tenant_a, self.project())
+        application = self.store.create_application(self.tenant_a, self.application(project))
+        first_revision, first_binding = self.revision_and_binding(application, suffix="1")
+        second_revision, second_binding = self.revision_and_binding(
+            application, suffix="2", revision_number=2
+        )
+        self.store.create_revision(self.tenant_a, first_revision, (first_binding,))
+        self.store.create_revision(self.tenant_a, second_revision, (second_binding,))
+        first_deployment = Deployment(
+            deployment_id=identifier("dep", "1"),
+            application_id=application.application_id,
+            revision_id=first_revision.revision_id,
+            environment=DeploymentEnvironment.PRODUCTION,
+            deployed_at=4.0,
+            deployed_by=self.tenant_a.subject,
+        )
+        first_event = AuditEvent(
+            audit_event_id=identifier("audit", "1"),
+            tenant_id=self.tenant_a.tenant_id,
+            event_type=ApplicationAuditEventType.DEPLOYMENT_CREATED,
+            occurred_at=4.0,
+            actor=self.tenant_a.subject,
+            summary="Published the first revision.",
+            project_id=project.project_id,
+            application_id=application.application_id,
+            revision_id=first_revision.revision_id,
+        )
+        published = self.store.publish(
+            self.tenant_a, first_deployment, first_event, updated_at=4.0
+        )
+        duplicate_deployment = Deployment(
+            deployment_id=first_deployment.deployment_id,
+            application_id=application.application_id,
+            revision_id=second_revision.revision_id,
+            environment=DeploymentEnvironment.PRODUCTION,
+            deployed_at=5.0,
+            deployed_by=self.tenant_a.subject,
+        )
+        second_event = AuditEvent(
+            audit_event_id=identifier("audit", "2"),
+            tenant_id=self.tenant_a.tenant_id,
+            event_type=ApplicationAuditEventType.DEPLOYMENT_CREATED,
+            occurred_at=5.0,
+            actor=self.tenant_a.subject,
+            summary="Published the second revision.",
+            project_id=project.project_id,
+            application_id=application.application_id,
+            revision_id=second_revision.revision_id,
+        )
+
+        self.assertEqual(published.active_revision_id, first_revision.revision_id)
+        with self.assertRaises(ApplicationStoreStorageError):
+            self.store.publish(self.tenant_a, duplicate_deployment, second_event, updated_at=5.0)
+        active = self.store.get_application(self.tenant_a, application.application_id)
+        self.assertEqual(active.active_revision_id, first_revision.revision_id)
+        self.assertEqual(self.store.list_deployments(self.tenant_a, application.application_id), (first_deployment,))
+        self.assertEqual(self.store.list_audit_events(self.tenant_a), (first_event,))
 
 
 if __name__ == "__main__":

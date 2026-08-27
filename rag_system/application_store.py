@@ -28,6 +28,7 @@ from rag_system.application_contracts import (
     ResourceBinding,
     ResourceKind,
     SessionPolicy,
+    is_valid_timestamp,
     validate_application_id,
     validate_deployment_id,
     validate_project_id,
@@ -351,6 +352,56 @@ class ApplicationStore:
                 raise ApplicationStoreStorageError() from error
         return deployment
 
+    def publish(
+        self,
+        principal: Principal,
+        deployment: Deployment,
+        audit_event: AuditEvent,
+        *,
+        updated_at: float,
+    ) -> Application:
+        """Atomically activate a revision, retain its deployment, and audit it."""
+
+        tenant_id = _principal_tenant(principal)
+        if not is_valid_timestamp(updated_at):
+            raise ApplicationValidationError("updated_at must be finite and non-negative.")
+        with self._write_lock, self._write_transaction() as connection:
+            application = self._require_application(connection, tenant_id, deployment.application_id)
+            if application.status is not ApplicationStatus.ACTIVE:
+                raise ApplicationValidationError("Archived applications cannot be published.")
+            if self._select_revision(
+                connection, tenant_id, deployment.application_id, deployment.revision_id
+            ) is None:
+                raise ApplicationRevisionUnavailableError()
+            _validate_publish_audit_event(tenant_id, deployment, audit_event)
+            try:
+                connection.execute(
+                    """
+                    UPDATE applications SET active_revision_id = ?, updated_at = ?
+                    WHERE application_id = ? AND tenant_id = ?
+                    """,
+                    (deployment.revision_id, updated_at, deployment.application_id, tenant_id.value),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO deployments (
+                        deployment_id, application_id, revision_id, environment, deployed_at, deployed_by
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        deployment.deployment_id,
+                        deployment.application_id,
+                        deployment.revision_id,
+                        deployment.environment.value,
+                        deployment.deployed_at,
+                        deployment.deployed_by,
+                    ),
+                )
+                self._insert_audit_event(connection, audit_event)
+            except sqlite3.IntegrityError as error:
+                raise ApplicationStoreStorageError() from error
+            return self._require_application(connection, tenant_id, deployment.application_id)
+
     def get_deployment(self, principal: Principal, deployment_id: str) -> Deployment:
         tenant_id = _principal_tenant(principal)
         clean_id = _safe_deployment_lookup_id(deployment_id)
@@ -401,28 +452,7 @@ class ApplicationStore:
                     connection, tenant_id, event.application_id, event.revision_id
                 ) is None:
                     raise ApplicationRevisionUnavailableError()
-            try:
-                connection.execute(
-                    """
-                    INSERT INTO application_audit_events (
-                        audit_event_id, tenant_id, event_type, occurred_at, actor, summary,
-                        project_id, application_id, revision_id
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        event.audit_event_id,
-                        tenant_id.value,
-                        event.event_type.value,
-                        event.occurred_at,
-                        event.actor,
-                        event.summary,
-                        event.project_id,
-                        event.application_id,
-                        event.revision_id,
-                    ),
-                )
-            except sqlite3.IntegrityError as error:
-                raise ApplicationStoreStorageError() from error
+            self._insert_audit_event(connection, event)
         return event
 
     def list_audit_events(self, principal: Principal, *, limit: int = 50) -> tuple[AuditEvent, ...]:
@@ -488,6 +518,31 @@ class ApplicationStore:
         if row is None:
             raise ProjectUnavailableError()
         return _project_from_row(row)
+
+    @staticmethod
+    def _insert_audit_event(connection: sqlite3.Connection, event: AuditEvent) -> None:
+        try:
+            connection.execute(
+                """
+                INSERT INTO application_audit_events (
+                    audit_event_id, tenant_id, event_type, occurred_at, actor, summary,
+                    project_id, application_id, revision_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event.audit_event_id,
+                    event.tenant_id.value,
+                    event.event_type.value,
+                    event.occurred_at,
+                    event.actor,
+                    event.summary,
+                    event.project_id,
+                    event.application_id,
+                    event.revision_id,
+                ),
+            )
+        except sqlite3.IntegrityError as error:
+            raise ApplicationStoreStorageError() from error
 
     def _require_application(
         self, connection: sqlite3.Connection, tenant_id: TenantId, application_id: str
@@ -760,6 +815,20 @@ def _validate_revision_for_application(
         raise ApplicationValidationError(
             "Knowledge-chat resource bindings must exactly match configured knowledge bases."
         )
+
+
+def _validate_publish_audit_event(
+    tenant_id: TenantId, deployment: Deployment, audit_event: AuditEvent
+) -> None:
+    if audit_event.tenant_id != tenant_id:
+        raise ApplicationUnavailableError()
+    if audit_event.event_type is not ApplicationAuditEventType.DEPLOYMENT_CREATED:
+        raise ApplicationValidationError("Publishing requires a deployment-created audit event.")
+    if (
+        audit_event.application_id != deployment.application_id
+        or audit_event.revision_id != deployment.revision_id
+    ):
+        raise ApplicationValidationError("Deployment audit event does not match the deployment.")
 
 
 def _encode_configuration(configuration: KnowledgeChatConfiguration) -> str:

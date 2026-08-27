@@ -66,6 +66,15 @@ class ApplicationRepository(Protocol):
 
     def create_deployment(self, principal: Principal, deployment: Deployment) -> Deployment: ...
 
+    def publish(
+        self,
+        principal: Principal,
+        deployment: Deployment,
+        audit_event: AuditEvent,
+        *,
+        updated_at: float,
+    ) -> Application: ...
+
     def get_deployment(self, principal: Principal, deployment_id: str) -> Deployment: ...
 
     def list_deployments(
