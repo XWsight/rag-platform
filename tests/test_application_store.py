@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -196,11 +197,40 @@ class ApplicationStoreTests(unittest.TestCase):
         with closing(sqlite3.connect(self.database)) as connection:
             self.assertEqual(connection.execute("PRAGMA journal_mode").fetchone()[0].lower(), "wal")
             self.assertEqual(connection.execute("PRAGMA foreign_keys").fetchone()[0], 0)
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 1)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 2)
         project = self.project()
         self.store.create_project(self.tenant_a, project)
         with self.assertRaises(ApplicationStoreStorageError):
             self.store.create_project(self.tenant_a, project)
+
+    def test_schema_migrates_legacy_configuration_with_cloud_disabled(self) -> None:
+        project = self.store.create_project(self.tenant_a, self.project())
+        application = self.store.create_application(self.tenant_a, self.application(project))
+        revision, binding = self.revision_and_binding(application)
+        self.store.create_revision(self.tenant_a, revision, (binding,))
+        with closing(sqlite3.connect(self.database)) as connection:
+            row = connection.execute(
+                "SELECT configuration_json FROM application_revisions WHERE revision_id = ?",
+                (revision.revision_id,),
+            ).fetchone()
+            payload = json.loads(row[0])
+            del payload["answer_policy"]["allow_cloud"]
+            connection.execute(
+                "UPDATE application_revisions SET configuration_json = ? WHERE revision_id = ?",
+                (json.dumps(payload, separators=(",", ":"), sort_keys=True), revision.revision_id),
+            )
+            connection.execute("PRAGMA user_version = 1")
+            connection.commit()
+
+        migrated = ApplicationStore(self.database)
+
+        self.assertFalse(
+            migrated.get_revision(
+                self.tenant_a, application.application_id, revision.revision_id
+            ).configuration.answer_policy.allow_cloud
+        )
+        with closing(sqlite3.connect(self.database)) as connection:
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 2)
 
     def test_schema_rejects_a_missing_custom_index_without_rewriting_data(self) -> None:
         with closing(sqlite3.connect(self.database)) as connection:
