@@ -94,7 +94,7 @@ jobs:
         run: |
           python scripts/verify_dependency_lock.py
           python -m pip install --find-links https://download.pytorch.org/whl/cpu/torch/ --require-hashes -r requirements-py311.lock
-          python -m pip install --no-deps -r requirements-dev.txt
+          python -m pip install -r requirements-dev.txt
       - name: Verify resolved environment
         run: |
           python -m pip check
