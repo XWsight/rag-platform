@@ -26,6 +26,7 @@ _APPLICATION_ID_PATTERN = re.compile(r"app_[A-Za-z0-9_-]{32}")
 _REVISION_ID_PATTERN = re.compile(r"rev_[A-Za-z0-9_-]{32}")
 _DEPLOYMENT_ID_PATTERN = re.compile(r"dep_[A-Za-z0-9_-]{32}")
 _BINDING_ID_PATTERN = re.compile(r"bind_[A-Za-z0-9_-]{32}")
+_AUDIT_EVENT_ID_PATTERN = re.compile(r"audit_[A-Za-z0-9_-]{32}")
 _SUBJECT_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:@/-]{0,254}")
 
 
@@ -60,6 +61,13 @@ class ResourceKind(StrEnum):
 
 class ResourceAccessMode(StrEnum):
     READ = "read"
+
+
+class ApplicationAuditEventType(StrEnum):
+    PROJECT_CREATED = "project_created"
+    APPLICATION_CREATED = "application_created"
+    REVISION_CREATED = "revision_created"
+    DEPLOYMENT_CREATED = "deployment_created"
 
 
 @dataclass(frozen=True, slots=True)
@@ -224,6 +232,37 @@ class Deployment:
 
 
 @dataclass(frozen=True, slots=True)
+class AuditEvent:
+    """Immutable, redaction-safe record of a platform state change."""
+
+    audit_event_id: str
+    tenant_id: TenantId
+    event_type: ApplicationAuditEventType
+    occurred_at: float
+    actor: str
+    summary: str
+    project_id: str | None = None
+    application_id: str | None = None
+    revision_id: str | None = None
+
+    def __post_init__(self) -> None:
+        validate_audit_event_id(self.audit_event_id)
+        _validate_tenant_id(self.tenant_id)
+        if not isinstance(self.event_type, ApplicationAuditEventType):
+            raise ApplicationValidationError("event_type must be an ApplicationAuditEventType.")
+        if not is_valid_timestamp(self.occurred_at):
+            raise ApplicationValidationError("occurred_at must be finite and non-negative.")
+        object.__setattr__(self, "actor", validate_subject(self.actor))
+        object.__setattr__(self, "summary", validate_audit_summary(self.summary))
+        if self.project_id is not None:
+            validate_project_id(self.project_id)
+        if self.application_id is not None:
+            validate_application_id(self.application_id)
+        if self.revision_id is not None:
+            validate_revision_id(self.revision_id)
+
+
+@dataclass(frozen=True, slots=True)
 class ResourceBinding:
     binding_id: str
     application_id: str
@@ -275,6 +314,10 @@ def validate_binding_id(value: object) -> str:
     return _validate_identifier(value, _BINDING_ID_PATTERN, "binding ID")
 
 
+def validate_audit_event_id(value: object) -> str:
+    return _validate_identifier(value, _AUDIT_EVENT_ID_PATTERN, "audit event ID")
+
+
 def validate_display_name(value: object) -> str:
     if not isinstance(value, str):
         raise ApplicationValidationError("Display name must be text.")
@@ -306,6 +349,17 @@ def validate_change_summary(value: object) -> str:
         raise ApplicationValidationError("Change summary has an invalid length.")
     if any(ord(character) < 32 and character not in {"\n", "\r", "\t"} for character in normalized):
         raise ApplicationValidationError("Change summary contains unsupported control characters.")
+    return normalized
+
+
+def validate_audit_summary(value: object) -> str:
+    if not isinstance(value, str):
+        raise ApplicationValidationError("Audit summary must be text.")
+    normalized = value.strip()
+    if not normalized or len(normalized) > 1_000:
+        raise ApplicationValidationError("Audit summary has an invalid length.")
+    if any(ord(character) < 32 and character not in {"\n", "\r", "\t"} for character in normalized):
+        raise ApplicationValidationError("Audit summary contains unsupported control characters.")
     return normalized
 
 
@@ -348,11 +402,13 @@ __all__ = [
     "MAX_KNOWLEDGE_BASE_BINDINGS",
     "AnswerPolicy",
     "Application",
+    "ApplicationAuditEventType",
     "ApplicationContractError",
     "ApplicationKind",
     "ApplicationRevision",
     "ApplicationStatus",
     "ApplicationValidationError",
+    "AuditEvent",
     "Deployment",
     "DeploymentEnvironment",
     "KnowledgeChatConfiguration",
@@ -363,6 +419,8 @@ __all__ = [
     "SessionPolicy",
     "is_valid_timestamp",
     "validate_application_id",
+    "validate_audit_event_id",
+    "validate_audit_summary",
     "validate_binding_id",
     "validate_change_summary",
     "validate_deployment_id",
