@@ -48,7 +48,7 @@ HTTP 入口不提供 TLS；公网部署必须使用受控反向代理。上传�
 | [`sqlite_support.py`](../rag_system/sqlite_support.py) | 仅复用 SQLite 连接策略、WAL/超时设置与短事务生命周期 | schema、领域校验、仓储公开错误或跨资源事务 |
 | [`file_store.py`](../rag_system/file_store.py) | 有界、不可穿越、拒绝链接/重解析点的租户文件保存、解析和精确删除 | 文档格式解析 |
 | [`job_contracts.py`](../rag_system/job_contracts.py)、[`jobs.py`](../rag_system/jobs.py)、[`job_store.py`](../rag_system/job_store.py) | 框架无关任务契约、有界线程池、租户隔离执行、协作取消，以及 SQLite 中有界的状态/结果快照归档 | 跨进程任务分发、恢复旧 Python callable 或分布式公平队列 |
-| [`loaders.py`](../rag_system/loaders.py)、[`ingestion.py`](../rag_system/ingestion.py) | 多格式安全解析、去重、确定性切分、清单和索引 ID | 向量搜索或生成 |
+| [`loaders.py`](../rag_system/loaders.py)、[`loader_contracts.py`](../rag_system/loader_contracts.py)、[`document_parsing.py`](../rag_system/document_parsing.py)、[`ingestion.py`](../rag_system/ingestion.py) | 输入路径边界、资源限制与错误契约、多格式安全解析、去重、确定性切分、清单和索引 ID | 向量搜索或生成 |
 | [`retrieval.py`](../rag_system/retrieval.py)、[`sparse.py`](../rag_system/sparse.py)、[`ranking.py`](../rag_system/ranking.py) | 受限本地余弦检索、BM25 稀疏检索、RRF 融合、可解释置信度和路由 | 供应商调用 |
 | [`reranking.py`](../rag_system/reranking.py) | 可选 CrossEncoder 二阶段重排及失败回退 | 默认必需依赖 |
 | [`rag_service.py`](../rag_system/rag_service.py)、[`research.py`](../rag_system/research.py) | 多轮查询上下文化、多查询研究模式、隐私路由、证据组装、生成和引用审计 | 具体模型供应商、租户资源所有权和磁盘布局 |
