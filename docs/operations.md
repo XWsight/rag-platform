@@ -1,6 +1,6 @@
 # 单节点运维手册
 
-本手册针对 `compose.yaml` 的单 API 容器与 `rag-platform-data` 持久卷。新部署从 `.env.example` 获得该当前默认值；RAG Studio 时期的原地升级必须显式保留既有 `rag-studio-data`，不能因为品牌更名而切换到空卷。所有变更先在非生产环境演练。涉及删除或覆盖数据的命令必须先核对环境、Compose 项目、卷名和备份校验值。
+本手册针对 `compose.yaml` 的单 API 容器与 `rag-platform-data` 持久卷。所有变更先在非生产环境演练。涉及删除或覆盖数据的命令必须先核对环境、Compose 项目、卷名和备份校验值。
 
 ## 日常检查
 
@@ -65,7 +65,7 @@ SQLite 数据库、本地向量索引和原始文档共同构成一个恢复单�
 SQLite 元数据和服务启动恢复路径；由于确定性 CI 不下载 Embedding 模型或导入客户文档，
 它不能代替包含真实知识库、抽样检索和回答链路的定期隔离恢复演练。
 
-需要将旧品牌卷复制为当前命名时，使用[兼容性迁移指南](compatibility-migration.md)中的计划和校验流程；工具默认只输出命令计划，必须显式传入 `--execute` 才会创建目标卷，且绝不自动删除源卷或失败目标卷。
+需要将一个已停写的卷复制到新卷时，使用 `python scripts\migrate_volume.py --source-volume <source> --destination-volume <destination>` 先输出计划；只有显式传入 `--execute` 才会创建目标卷。工具会逐文件比较 SHA-256 清单，且绝不自动删除源卷或失败目标卷。
 
 ## 恢复演练与正式恢复
 

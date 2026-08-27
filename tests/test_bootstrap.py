@@ -203,7 +203,6 @@ class BootstrapTests(unittest.TestCase):
             first = StorageRootLease.acquire(root)
             try:
                 self.assertTrue((root / ".rag-platform.instance").is_file())
-                self.assertTrue((root / ".rag-studio.instance").is_file())
                 with self.assertRaisesRegex(RuntimeError, "already in use"):
                     StorageRootLease.acquire(root)
             finally:
@@ -215,12 +214,12 @@ class BootstrapTests(unittest.TestCase):
     def test_storage_root_lease_rejects_a_non_file_lease_path(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / ".rag-studio.instance").mkdir()
+            (root / ".rag-platform.instance").mkdir()
 
             with self.assertRaisesRegex(RuntimeError, "lease path is unsafe"):
                 StorageRootLease.acquire(root)
 
-    def test_storage_root_lease_releases_the_legacy_lock_when_the_current_path_is_unsafe(self) -> None:
+    def test_storage_root_lease_recovers_after_an_unsafe_path_is_removed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             current_path = root / ".rag-platform.instance"

@@ -195,7 +195,6 @@ sequenceDiagram
 ├── idempotency.sqlite3   # 创建请求预留与结果绑定
 ├── jobs.sqlite3          # 有界、租户隔离的 job 状态与结果快照归档
 ├── .rag-platform.instance  # 当前单节点进程独占锁文件
-├── .rag-studio.instance    # 迁移期内同时持有，阻止旧版本并发写入
 ├── documents/            # tenant-<sha256>/<document-resource>/<filename>
 └── vector/               # 原子写入的本地向量索引文件
 ```

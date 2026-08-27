@@ -86,4 +86,4 @@ jobs:
           reports/release-manifest.json
           reports/release-image.json
           --generate-notes
-          --title "RAG Studio ${GITHUB_REF_NAME}"
+          --title "RAG Platform ${GITHUB_REF_NAME}"

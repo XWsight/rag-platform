@@ -38,14 +38,11 @@ class InitDerivativeTests(unittest.TestCase):
             self.assertTrue(compatibility.is_file())
             compatibility_result = validate_compatibility(compatibility, base_root=Path.cwd())
             self.assertTrue(compatibility_result["compatible"])
-            self.assertFalse(compatibility_result["identity_upgrade_available"])
             provider_factory = (created / "provider_factory.py").read_text(encoding="utf-8")
             self.assertIn("class LegalAssistantProviderFactory", provider_factory)
             self.assertNotIn("{{", provider_factory)
             api_entrypoint = (created / "asgi.py").read_text(encoding="utf-8")
             self.assertIn("LegalAssistantProviderFactory", api_entrypoint)
-            self.assertIn("from .asgi import app", (created / "api_app.py").read_text())
-            self.assertIn("from .workbench import main", (created / "local_app.py").read_text())
             self.assertIn("RAG_PRODUCT_NAME=Legal Assistant", (created / ".env.example").read_text())
             self.assertIn("Upstream baseline", (created / "UPSTREAM.md").read_text())
             self.assertNotIn("{{", (created / "UPSTREAM.md").read_text())
@@ -70,7 +67,7 @@ class InitDerivativeTests(unittest.TestCase):
                         "schema_version": 1,
                         "base_project": "rag-platform",
                         "base_revision": "0123456",
-                        "base_api_major": 3,
+                        "base_api_major": 2,
                     }
                 ),
                 encoding="utf-8",
@@ -78,24 +75,23 @@ class InitDerivativeTests(unittest.TestCase):
             with self.assertRaises(DerivativeCompatibilityError):
                 validate_compatibility(manifest, base_root=Path.cwd())
 
-    def test_accepts_the_legacy_base_identity_for_existing_derivatives(self) -> None:
+    def test_rejects_a_noncurrent_base_identity(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             manifest = Path(directory) / "compatibility.json"
             manifest.write_text(
                 json.dumps(
                     {
                         "schema_version": 1,
-                        "base_project": "rag-studio",
+                        "base_project": "another-platform",
                         "base_revision": "0123456",
-                        "base_api_major": 2,
+                        "base_api_major": 3,
                     }
                 ),
                 encoding="utf-8",
             )
 
-            result = validate_compatibility(manifest, base_root=Path.cwd())
-            self.assertTrue(result["compatible"])
-            self.assertTrue(result["identity_upgrade_available"])
+            with self.assertRaises(DerivativeCompatibilityError):
+                validate_compatibility(manifest, base_root=Path.cwd())
 
     def test_accepts_an_explicit_base_revision_for_a_reproducible_baseline(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

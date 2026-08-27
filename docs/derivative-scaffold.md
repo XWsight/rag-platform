@@ -20,7 +20,6 @@ python scripts\init_derivative.py `
 
 - 默认委托内置 Provider 的 `provider_factory.py`；
 - 可直接运行的 `asgi.py` 和 `workbench.py` 组合根；
-- 兼容旧派生项目的 `api_app.py` 和 `local_app.py` 转发入口；
 - 不访问外网的 Provider 工厂回归测试；
 - 产品展示配置覆盖示例；
 - 领域评测治理记录：生成时为 `draft`，不会伪造领域基线。

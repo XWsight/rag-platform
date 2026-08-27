@@ -13,10 +13,8 @@ from typing import Any
 
 _FIELDS = frozenset({"schema_version", "base_project", "base_revision", "base_api_major"})
 _REVISION = re.compile(r"(?:unrecorded|[0-9a-f]{7,64})")
-# ``rag-studio`` is the published identity before the repository rebrand.  It
-# remains valid for schema v1 manifests so existing derived projects can
-# upgrade deliberately rather than being rejected by a cosmetic rename.
-_SUPPORTED_BASE_PROJECTS = frozenset({"rag-platform", "rag-studio"})
+_SUPPORTED_BASE_PROJECTS = frozenset({"rag-platform"})
+_SUPPORTED_BASE_API_MAJOR = 3
 
 
 class DerivativeCompatibilityError(ValueError):
@@ -34,21 +32,19 @@ def validate_compatibility(path: Path, *, base_root: Path) -> dict[str, object]:
         raise DerivativeCompatibilityError("compatibility manifest base is unsupported")
     if not isinstance(payload["base_revision"], str) or _REVISION.fullmatch(payload["base_revision"]) is None:
         raise DerivativeCompatibilityError("compatibility manifest revision is invalid")
-    if payload["base_api_major"] != 2:
+    if payload["base_api_major"] != _SUPPORTED_BASE_API_MAJOR:
         raise DerivativeCompatibilityError("derivative requires a different API major")
     try:
         project = tomllib.loads((base_root / "pyproject.toml").read_text(encoding="utf-8"))
         version = project["project"]["version"]
     except (KeyError, OSError, tomllib.TOMLDecodeError) as error:
         raise DerivativeCompatibilityError("base package metadata is unavailable") from error
-    if not isinstance(version, str) or not version.startswith("2."):
+    if not isinstance(version, str) or not version.startswith(f"{_SUPPORTED_BASE_API_MAJOR}."):
         raise DerivativeCompatibilityError("base package major is incompatible")
-    uses_legacy_identity = payload["base_project"] == "rag-studio"
     return {
         "base_version": version,
         "base_revision": payload["base_revision"],
         "compatible": True,
-        "identity_upgrade_available": uses_legacy_identity,
     }
 
 

@@ -1,7 +1,0 @@
-"""Compatibility workbench launcher; use :mod:`{{PACKAGE_NAME}}.workbench` instead."""
-
-from .workbench import main
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

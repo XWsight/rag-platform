@@ -62,6 +62,4 @@ services:
 
 volumes:
   data:
-    # Retained across the RAG Studio -> RAG Platform rebrand so existing data
-    # remains mounted after an in-place upgrade.
-    name: ${RAG_DATA_VOLUME:-rag-studio-data}
+    name: ${RAG_DATA_VOLUME:-rag-platform-data}

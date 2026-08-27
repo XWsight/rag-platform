@@ -7,4 +7,4 @@ __all__ = ["AnswerRequest", "AnswerResult", "Route", "Settings"]
 # Keep this aligned with the PEP 621 version in ``pyproject.toml``.  The API
 # exposes this value as well, so a pre-release can never masquerade as a
 # stable build.
-__version__ = "2.0.0.dev0"
+__version__ = "3.0.0.dev0"

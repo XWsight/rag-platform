@@ -64,10 +64,9 @@ class ProductionRuntime:
 
 
 class StorageRootLease:
-    """Hold current and legacy exclusive leases for one single-node storage root."""
+    """Hold the exclusive lease for one single-node storage root."""
 
     _CURRENT_FILENAME = ".rag-platform.instance"
-    _LEGACY_FILENAMES = (".rag-studio.instance",)
 
     def __init__(self, paths: Sequence[Path]) -> None:
         self._paths = tuple(paths)
@@ -75,15 +74,7 @@ class StorageRootLease:
 
     @classmethod
     def acquire(cls, storage_root: Path) -> StorageRootLease:
-        # Acquire the historical lock first so pre-rebrand processes cannot
-        # start between the two lock acquisitions. Keep it until the next
-        # breaking release, when old binaries are no longer supported.
-        lease = cls(
-            (
-                *(storage_root / filename for filename in cls._LEGACY_FILENAMES),
-                storage_root / cls._CURRENT_FILENAME,
-            )
-        )
+        lease = cls((storage_root / cls._CURRENT_FILENAME,))
         lease._acquire()
         return lease
 

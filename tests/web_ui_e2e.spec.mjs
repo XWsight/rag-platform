@@ -83,9 +83,9 @@ test("the workbench keeps authentication and ingestion failures actionable", asy
   await expect(page.locator("#task-banner")).toHaveClass(/hidden/);
 });
 
-test("legacy session keys are promoted without dropping the existing session", async ({page}) => {
+test("the workbench only uses its current per-tab session key", async ({page}) => {
   await page.addInitScript((apiKey) => {
-    window.sessionStorage.setItem("rag-studio-api-key", apiKey);
+    window.sessionStorage.setItem("rag-platform-api-key", apiKey);
   }, API_KEY);
   const authenticatedList = page.waitForResponse((response) => (
     response.url().endsWith("/v1/knowledge-bases?limit=100") && response.status() === 200
@@ -93,8 +93,5 @@ test("legacy session keys are promoted without dropping the existing session", a
 
   await page.goto("/app");
   await authenticatedList;
-  await expect.poll(() => page.evaluate(() => window.sessionStorage.getItem("rag-platform-api-key")))
-    .toBe(API_KEY);
-  await expect.poll(() => page.evaluate(() => window.sessionStorage.getItem("rag-studio-api-key")))
-    .toBe(API_KEY);
+  await expect.poll(() => page.evaluate(() => window.sessionStorage.getItem("rag-platform-api-key"))).toBe(API_KEY);
 });

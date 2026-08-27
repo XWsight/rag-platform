@@ -1,6 +1,0 @@
-"""Compatibility ASGI entry point; use :mod:`{{PACKAGE_NAME}}.asgi` instead."""
-
-from .asgi import app
-
-
-__all__ = ["app"]

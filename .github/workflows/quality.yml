@@ -41,6 +41,7 @@ jobs:
           python scripts/scan_secrets.py
           ruff check .
           mypy
+          python scripts/verify_wheel.py
       - name: Deterministic retrieval quality gate
         run: >-
           python scripts/benchmark_sparse.py

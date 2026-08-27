@@ -2,14 +2,12 @@
 
 const KEY_STORAGE = "rag-platform-api-key";
 const ACTIVE_STORAGE = "rag-platform-active-base";
-const LEGACY_KEY_STORAGE = "rag-studio-api-key";
-const LEGACY_ACTIVE_STORAGE = "rag-studio-active-base";
 const KNOWLEDGE_BASE_PAGE_SIZE = 100;
 
 const state = {
-  apiKey: readSession(KEY_STORAGE, LEGACY_KEY_STORAGE),
+  apiKey: readSession(KEY_STORAGE),
   knowledgeBases: [],
-  activeId: readSession(ACTIVE_STORAGE, LEGACY_ACTIVE_STORAGE),
+  activeId: readSession(ACTIVE_STORAGE),
   sessionId: `session_${randomId()}`,
   busy: false,
   search: "",
@@ -77,18 +75,9 @@ const ui = {
   productTagline: document.querySelector("#product-tagline"),
 };
 
-function readSession(key, legacyKey = "") {
+function readSession(key) {
   try {
-    const currentValue = window.sessionStorage.getItem(key);
-    if (currentValue) return currentValue;
-    const legacyValue = legacyKey ? window.sessionStorage.getItem(legacyKey) : "";
-    if (!legacyValue) return "";
-    try {
-      window.sessionStorage.setItem(key, legacyValue);
-    } catch {
-      // Reading the legacy value remains safe even if storage has become read-only.
-    }
-    return legacyValue;
+    return window.sessionStorage.getItem(key) || "";
   } catch {
     return "";
   }

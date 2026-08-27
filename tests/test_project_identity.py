@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import json
 import tomllib
 import unittest
@@ -45,37 +44,36 @@ class ProjectIdentityTests(unittest.TestCase):
         self.assertEqual(lock["name"], "rag-platform")
         self.assertEqual(lock["packages"][""]["name"], "rag-platform")
 
-    def test_active_package_modules_do_not_import_renamed_compatibility_modules(self) -> None:
+    def test_package_does_not_ship_retired_entrypoint_modules(self) -> None:
         root = Path(__file__).resolve().parents[1]
-        compatibility_modules = {
-            "rag_system.assets",
-            "rag_system.bootstrap",
-            "rag_system.platform",
-            "rag_system.service",
-            "rag_system.ui",
-            "rag_system.web",
-        }
-        compatibility_files = {f"{module.rsplit('.', maxsplit=1)[1]}.py" for module in compatibility_modules}
-        violations: list[str] = []
-        for source_path in sorted((root / "rag_system").glob("*.py")):
-            if source_path.name in compatibility_files:
-                continue
-            tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
-            imports = {
-                item.name
-                for node in ast.walk(tree)
-                if isinstance(node, ast.Import)
-                for item in node.names
-            } | {
-                node.module
-                for node in ast.walk(tree)
-                if isinstance(node, ast.ImportFrom) and node.module is not None
-            }
-            legacy_imports = sorted(imports & compatibility_modules)
-            if legacy_imports:
-                violations.append(f"{source_path.name}: {', '.join(legacy_imports)}")
+        retired_modules = {"assets.py", "bootstrap.py", "platform.py", "service.py", "ui.py", "web.py"}
+        self.assertEqual(retired_modules & {path.name for path in (root / "rag_system").glob("*.py")}, set())
 
-        self.assertEqual(violations, [])
+    def test_source_and_public_assets_do_not_reference_the_retired_product_identity(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        retired_identities = ("rag" + "-studio", "rag" + " studio")
+        candidates = [
+            path
+            for directory in (
+                root / ".github",
+                root / "docs",
+                root / "rag_system",
+                root / "scripts",
+                root / "templates",
+                root / "tests",
+            )
+            for path in directory.rglob("*")
+            if path.is_file() and path.suffix in {".json", ".js", ".md", ".mjs", ".py", ".template", ".toml", ".yaml", ".yml"}
+        ]
+        candidates.extend(path for path in (root / "compose.yaml", root / "README.md", root / ".env.example") if path.is_file())
+        self.assertEqual(
+            [
+                str(path.relative_to(root))
+                for path in candidates
+                if any(identity in path.read_text(encoding="utf-8").casefold() for identity in retired_identities)
+            ],
+            [],
+        )
 
     def test_public_project_assets_do_not_reference_the_retired_distribution_name(self) -> None:
         root = Path(__file__).resolve().parents[1]

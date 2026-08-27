@@ -6,11 +6,6 @@ from unittest.mock import Mock, patch
 
 from rag_system import server, workbench
 from rag_system.config import Settings
-from rag_system.knowledge_base_assets import KnowledgeBaseAssets
-from rag_system.rag_platform import RagPlatform
-from rag_system.rag_service import RagService
-from rag_system.runtime_bootstrap import build_service
-from rag_system.web_results import rank_web_results
 
 
 class EntrypointTests(unittest.TestCase):
@@ -54,20 +49,6 @@ class EntrypointTests(unittest.TestCase):
             strict_cors=True,
             enable_monitoring=False,
         )
-
-    def test_legacy_module_names_remain_compatibility_only(self) -> None:
-        from rag_system.assets import KnowledgeBaseAssets as legacy_assets
-        from rag_system.bootstrap import build_service as legacy_build_service
-        from rag_system.platform import RagPlatform as legacy_platform
-        from rag_system.service import RagService as legacy_service
-        from rag_system.web import rank_web_results as legacy_web_results
-
-        self.assertIs(legacy_assets, KnowledgeBaseAssets)
-        self.assertIs(legacy_build_service, build_service)
-        self.assertIs(legacy_platform, RagPlatform)
-        self.assertIs(legacy_service, RagService)
-        self.assertIs(legacy_web_results, rank_web_results)
-
 
 if __name__ == "__main__":
     unittest.main()

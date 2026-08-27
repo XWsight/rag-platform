@@ -44,6 +44,7 @@ try {
     Invoke-CheckedPython scripts/audit_dependencies.py
     Invoke-CheckedPython -m ruff check .
     Invoke-CheckedPython -m mypy
+    Invoke-CheckedPython scripts/verify_wheel.py
     Invoke-CheckedPython scripts/benchmark_sparse.py `
         evals/retrieval_cases.jsonl `
         evals/corpus/rag.md `

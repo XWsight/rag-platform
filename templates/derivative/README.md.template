@@ -9,7 +9,6 @@ deployment files, then add domain-specific code here.
 - `provider_factory.py`: replace the default provider deliberately, through a typed factory.
 - `asgi.py`: ASGI entry point using this derivative factory.
 - `workbench.py`: optional local Gradio entry point using this derivative factory.
-- `api_app.py` and `local_app.py`: compatibility shims for older launch commands; new code should use the canonical entry points above.
 - `tests/`: a no-network factory regression test.
 - `evals/`: a machine-readable governance record for domain evaluation data.
 

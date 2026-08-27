@@ -1,4 +1,4 @@
-"""Copy a verified Docker data volume to a current RAG Platform volume name."""
+"""Copy one verified Docker data volume to a different current volume name."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ _BUSYBOX_IMAGE = "busybox:1.37.0"
 
 
 class VolumeMigrationError(RuntimeError):
-    """Raised when a volume migration cannot prove a safe copy."""
+    """Raised when a volume copy cannot be proven safe."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,11 +121,7 @@ def _require_volume(volume_name: str, *, must_exist: bool) -> None:
 def _run(command: Sequence[str]) -> str:
     try:
         result = subprocess.run(
-            tuple(command),
-            check=False,
-            capture_output=True,
-            encoding="utf-8",
-            timeout=300,
+            tuple(command), check=False, capture_output=True, encoding="utf-8", timeout=300
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         raise VolumeMigrationError("Docker command could not be completed") from error
@@ -138,11 +134,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-volume", required=True)
     parser.add_argument("--destination-volume", required=True)
-    parser.add_argument(
-        "--execute",
-        action="store_true",
-        help="Create and copy the destination volume after reviewing the default plan.",
-    )
+    parser.add_argument("--execute", action="store_true", help="Create and copy after reviewing plan.")
     arguments = parser.parse_args(argv)
     try:
         plan = build_plan(
