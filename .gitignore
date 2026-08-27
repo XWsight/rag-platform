@@ -2,6 +2,7 @@
 .env.*
 !.env.example
 !templates/derivative/.env.example.template
+secrets/
 .venv/
 .venv-ci/
 .venv-test/

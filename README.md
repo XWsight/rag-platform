@@ -197,6 +197,10 @@ curl --fail http://127.0.0.1:8000/health/ready
 
 Compose 默认仅发布到 `127.0.0.1`，使用非 root 用户、只读容器根文件系统、最小权限、资源上限、日志轮转和 `/data` 持久卷。公网访问必须由可信反向代理终止 TLS。备份、恢复、升级、回滚、密钥轮换和删除要求见[部署说明](docs/deployment.md)与[运维手册](docs/operations.md)；Prometheus 抓取与告警的受控部署方式见[监控说明](docs/monitoring.md)。
 
+本地开发可使用 `.env`；生产容器应优先使用只读文件挂载的 `RAG_API_KEYS_JSON_FILE` 与
+`ZHIPU_API_KEY_FILE`，避免原始密钥留在容器环境变量中。Docker Compose 覆盖示例、文件安全
+边界与轮换步骤见[密钥来源说明](docs/secrets.md)。
+
 运行时直接依赖保存在易审查的 `requirements.txt`，其完整传递闭包与 SHA-256 哈希按受支持 Python 小版本固定在 `requirements-py311.lock` 和 `requirements-py312.lock`。`requirements-lock.in` 在这份通用审计输入之外，明确 CPU-only 部署所需的 torch wheel 选择。安装生产依赖时选择当前解释器对应的锁文件，例如 Python 3.11 使用 `python -m pip install --find-links https://download.pytorch.org/whl/cpu/torch/ --require-hashes -r requirements-py311.lock`；修改直接依赖后，分别以 `uv pip compile requirements-lock.in --generate-hashes --python-version 3.11 --python-platform linux --index https://download.pytorch.org/whl/cpu --default-index https://pypi.org/simple --index-strategy unsafe-best-match --output-file requirements-py311.lock` 和对应的 `3.12` 命令有意更新锁文件，并在相应解释器中运行 `python scripts\verify_dependency_lock.py`。这里的专用 torch 索引与 PyPI 一起参与解析，且锁文件必须保留每个候选制品的哈希。准备发布时可运行 `python scripts\release_manifest.py --require-clean --json-output reports\release-manifest.json`，记录源码提交、包版本和 Docker/Compose/依赖清单的 SHA-256。CI 还会从干净的锁定运行时环境生成 SPDX 2.3 SBOM 工件；稳定发行还会附上不可变 OCI `image@sha256:...` 引用、BuildKit provenance、镜像 SBOM 与 Sigstore keyless 签名。验证者应始终针对 digest（而非 `latest`）验证签名和 provenance；它们不会读取 `.env`，也不等同于运行时密钥管理。
 
 ## 验证与评测

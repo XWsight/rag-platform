@@ -1,0 +1,73 @@
+name: release-rehearsal
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-rehearsal-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  rehearse-release-inputs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Verify release inputs and locked runtime
+        run: |
+          python scripts/verify_dependency_lock.py
+          python -m pip install --find-links https://download.pytorch.org/whl/cpu/torch/ --require-hashes -r requirements-py312.lock
+          python scripts/verify_openapi_contract.py
+          python scripts/verify_wheel.py
+          python scripts/generate_runtime_sbom.py --requirements requirements.txt --output reports/runtime-sbom.spdx.json
+          python scripts/release_manifest.py --require-clean --json-output reports/release-manifest.json
+      - name: Build a local release candidate without publishing
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: rag-platform:release-rehearsal
+          build-args: VCS_REF=${{ github.sha }}
+      - name: Verify image provenance label and startup contract
+        shell: bash
+        run: |
+          image="rag-platform:release-rehearsal"
+          container="rag-platform-release-rehearsal-${{ github.run_id }}-${{ github.run_attempt }}"
+          revision="$(docker image inspect "$image" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
+          test "$revision" = "${{ github.sha }}"
+          docker run -d --name "$container" \
+            -e RAG_PERSIST_DATA=true \
+            -e RAG_STORAGE_ROOT=/data \
+            -e RAG_API_KEYS_JSON='{"release-rehearsal-key-0123456789abcdef":{"subject":"rehearsal","tenant_id":"rehearsal","roles":["reader","writer","operator"]}}' \
+            "$image" --host 0.0.0.0 --port 8000
+          cleanup() { docker rm -f "$container" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          for attempt in $(seq 1 45); do
+            if docker exec "$container" python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3).read()"; then
+              break
+            fi
+            if [ "$attempt" = 45 ]; then
+              docker logs "$container"
+              exit 1
+            fi
+            sleep 2
+          done
+          docker exec "$container" python -c "import urllib.request; request=urllib.request.Request('http://127.0.0.1:8000/v1/knowledge-bases', headers={'X-API-Key':'release-rehearsal-key-0123456789abcdef'}); assert urllib.request.urlopen(request, timeout=3).status == 200"
+      - name: Upload rehearsal evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-rehearsal-${{ github.sha }}
+          path: |
+            reports/runtime-sbom.spdx.json
+            reports/release-manifest.json
+          if-no-files-found: error
