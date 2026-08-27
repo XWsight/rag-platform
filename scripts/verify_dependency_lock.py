@@ -18,6 +18,7 @@ _LOCK_PIN = re.compile(
 )
 _HASH = re.compile(r"^\s+--hash=sha256:[0-9a-f]{64}\s*\\?$")
 _NORMALIZE = re.compile(r"[-_.]+")
+_PYTHON_VERSION_OPTION = re.compile(r"--python(?:-version)?\s+([0-9]+\.[0-9]+)")
 
 
 class DependencyLockError(ValueError):
@@ -118,10 +119,17 @@ def load_locked_pins(lock_path: Path) -> tuple[dict[str, str], int]:
     return pins, hashes
 
 
-def verify_lock(requirements_path: Path, lock_path: Path) -> LockSummary:
+def verify_lock(
+    requirements_path: Path,
+    lock_path: Path,
+    *,
+    expected_python_version: str | None = None,
+) -> LockSummary:
     """Require every direct pin to be present at the same version in a hashed lock."""
 
     direct_pins = load_direct_pins(requirements_path)
+    if expected_python_version is not None:
+        _verify_target_python(lock_path, expected_python_version)
     locked_pins, hashes = load_locked_pins(lock_path)
     for name, version in direct_pins.items():
         locked_version = locked_pins.get(name)
@@ -138,13 +146,30 @@ def verify_lock(requirements_path: Path, lock_path: Path) -> LockSummary:
     )
 
 
+def _verify_target_python(lock_path: Path, expected_python_version: str) -> None:
+    """Reject a lock generated for a different interpreter minor version."""
+
+    text = "\n".join(_read_lines(lock_path, "runtime lock"))
+    generated_versions = set(_PYTHON_VERSION_OPTION.findall(text))
+    if expected_python_version not in generated_versions:
+        rendered_versions = ", ".join(sorted(generated_versions)) or "none"
+        raise DependencyLockError(
+            "runtime lock target Python version mismatch: "
+            f"expected {expected_python_version}, found {rendered_versions}"
+        )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--requirements", type=Path, default=DEFAULT_REQUIREMENTS)
     parser.add_argument("--lock", type=Path, default=DEFAULT_LOCK)
     arguments = parser.parse_args(argv)
     try:
-        summary = verify_lock(arguments.requirements, arguments.lock)
+        summary = verify_lock(
+            arguments.requirements,
+            arguments.lock,
+            expected_python_version=f"{sys.version_info.major}.{sys.version_info.minor}",
+        )
     except DependencyLockError as error:
         print(f"dependency lock rejected: {error}", file=sys.stderr)
         return 2

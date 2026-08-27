@@ -377,7 +377,10 @@ def _start_audit_process(requirements_path: Path) -> subprocess.Popen[str]:
         "text": True,
     }
     if os.name == "nt":
-        arguments["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        # This Win32-only flag is intentionally looked up at runtime: POSIX
+        # Python stubs do not expose it, even though Windows requires it.
+        windows_flag_name = "CREATE_NEW_PROCESS_GROUP"
+        arguments["creationflags"] = getattr(subprocess, windows_flag_name)
     else:
         arguments["start_new_session"] = True
     return subprocess.Popen(build_command(requirements_path), **arguments)
