@@ -2,10 +2,30 @@ $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $virtualEnvironmentPython = Join-Path $projectRoot ".venv\Scripts\python.exe"
-$pythonExecutable = if (Test-Path -LiteralPath $virtualEnvironmentPython -PathType Leaf) {
+$configuredPython = $env:RAG_PYTHON
+$pythonExecutable = if ($configuredPython) {
+    if (-not (Test-Path -LiteralPath $configuredPython -PathType Leaf)) {
+        throw "RAG_PYTHON must name an existing Python executable: ${configuredPython}"
+    }
+    $configuredPython
+} elseif (Test-Path -LiteralPath $virtualEnvironmentPython -PathType Leaf) {
     $virtualEnvironmentPython
 } else {
-    (Get-Command python -ErrorAction Stop).Source
+    throw @"
+Missing project virtual environment. Create the supported development environment first:
+  py -3.11 -m venv .venv
+  .\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-dev.txt
+
+To use another already-prepared Python 3.11 or 3.12 environment explicitly, set RAG_PYTHON to its executable path.
+"@
+}
+
+$pythonVersion = (& $pythonExecutable -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')").Trim()
+if ($LASTEXITCODE -ne 0) {
+    throw "Unable to determine Python version for ${pythonExecutable}."
+}
+if ($pythonVersion -notin @("3.11", "3.12")) {
+    throw "scripts/check.ps1 requires Python 3.11 or 3.12; selected ${pythonExecutable} reports ${pythonVersion}."
 }
 
 function Invoke-CheckedPython {
@@ -37,6 +57,10 @@ try {
     $nodeVersion = (& node --version).Trim()
     if ($nodeVersion -notmatch '^v24\.') {
         throw "Node 24 is required for the browser regression suite; found ${nodeVersion}."
+    }
+    $playwrightCli = Join-Path $projectRoot "node_modules\@playwright\test\cli.js"
+    if (-not (Test-Path -LiteralPath $playwrightCli -PathType Leaf)) {
+        throw "Browser test dependencies are missing. Run npm ci before scripts/check.ps1."
     }
     Invoke-CheckedPython -m compileall -q rag_system tests scripts
     Invoke-CheckedPython scripts/scan_secrets.py

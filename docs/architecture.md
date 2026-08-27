@@ -45,6 +45,7 @@ HTTP 入口不提供 TLS；公网部署必须使用受控反向代理。上传�
 | [`knowledge_base_assets.py`](../rag_system/knowledge_base_assets.py)、[`indexing.py`](../rag_system/indexing.py) | Catalog 清单与文件结果核对、路径/哈希完整性、耐久索引状态迁移、取消收敛和失败补偿 | API 鉴权、问答路由或供应商调用 |
 | [`catalog.py`](../rag_system/catalog.py) | SQLite schema v4 中租户范围的知识库状态机、显式上传准备阶段、耐久取消意图与不可变文档清单 | 文档正文、向量或耐久任务执行日志 |
 | [`idempotency.py`](../rag_system/idempotency.py) | SQLite 中按租户、操作和 key 隔离的创建请求预留与结果绑定 | 任务结果持久化 |
+| [`sqlite_support.py`](../rag_system/sqlite_support.py) | 仅复用 SQLite 连接策略、WAL/超时设置与短事务生命周期 | schema、领域校验、仓储公开错误或跨资源事务 |
 | [`file_store.py`](../rag_system/file_store.py) | 有界、不可穿越、拒绝链接/重解析点的租户文件保存、解析和精确删除 | 文档格式解析 |
 | [`job_contracts.py`](../rag_system/job_contracts.py)、[`jobs.py`](../rag_system/jobs.py)、[`job_store.py`](../rag_system/job_store.py) | 框架无关任务契约、有界线程池、租户隔离执行、协作取消，以及 SQLite 中有界的状态/结果快照归档 | 跨进程任务分发、恢复旧 Python callable 或分布式公平队列 |
 | [`loaders.py`](../rag_system/loaders.py)、[`ingestion.py`](../rag_system/ingestion.py) | 多格式安全解析、去重、确定性切分、清单和索引 ID | 向量搜索或生成 |
@@ -56,7 +57,7 @@ HTTP 入口不提供 TLS；公网部署必须使用受控反向代理。上传�
 | [`memory.py`](../rag_system/memory.py) | TTL/LRU 有界的进程内会话历史 | 耐久会话或跨副本共享 |
 | [`observability.py`](../rag_system/observability.py)、[`metrics.py`](../rag_system/metrics.py) | 字段白名单 JSON 事件、低基数指标和关联 ID | 文档/问题正文日志或分布式追踪后端 |
 | [`runtime_profile.py`](../rag_system/runtime_profile.py) | 可替换运行时 Profile 的组件所有权与就绪探针契约 | 具体 SQLite、文件或 Provider 实现 |
-| [`runtime_bootstrap.py`](../rag_system/runtime_bootstrap.py) | 默认 `local-durable` Profile 的组装、严格凭据解析、启动恢复与存储租约 | 运行时迁移编排 |
+| [`runtime_bootstrap.py`](../rag_system/runtime_bootstrap.py)、[`local_durable.py`](../rag_system/local_durable.py) | 严格凭据解析、启动恢复与存储租约；以及默认 `local-durable` Profile 的具体组件组装 | 运行时迁移编排 |
 
 领域对象和协议集中在 [`domain.py`](../rag_system/domain.py)、[`knowledge_base_contracts.py`](../rag_system/knowledge_base_contracts.py)、[`ports.py`](../rag_system/ports.py) 与 [`application.py`](../rag_system/application.py)。HTTP 只依赖应用端口；具体平台可以在组合根替换。架构测试同时禁止生产模块导入环、HTTP 反向依赖平台/存储实现，以及领域协议引入 Web、数据库或模型框架。
 

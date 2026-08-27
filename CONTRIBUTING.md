@@ -42,8 +42,14 @@ python -m pip install -r requirements.txt -r requirements-dev.txt
 Windows 上运行完整本地检查：
 
 ```powershell
+# The checker intentionally uses .venv and refuses unsupported system Python.
 powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 ```
+
+`scripts/check.ps1` only uses `.venv\Scripts\python.exe` by default. If an
+already prepared Python 3.11/3.12 environment must be used instead, pass its
+absolute executable path explicitly with `$env:RAG_PYTHON = 'C:\path\to\python.exe'`.
+Run `npm ci` before the full check so the Playwright runner is present.
 
 它依次执行 compileall、Ruff、带分支覆盖率的 unittest、覆盖率门槛和 `git diff --check`。也可以单独运行：
 

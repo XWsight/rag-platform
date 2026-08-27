@@ -9,14 +9,15 @@ import re
 import secrets
 import sqlite3
 import time
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
 from typing import cast
 
 from .tenancy import Principal, TenantId
+from rag_system.sqlite_support import SqliteDatabase
 
 
 _SCHEMA_VERSION = 1
@@ -168,6 +169,11 @@ class IdempotencyStore:
         self._ttl_seconds = normalized_ttl
         self._max_records_per_tenant = max_records_per_tenant
         self._timeout_seconds = normalized_timeout
+        self._database = SqliteDatabase(
+            self._database_path,
+            timeout_seconds=self._timeout_seconds,
+            synchronous_normal=True,
+        )
         self._clock = clock
         self._id_factory = id_factory
         self._write_lock = RLock()
@@ -471,54 +477,18 @@ class IdempotencyStore:
         return value
 
     def _connect(self) -> sqlite3.Connection:
-        connection: sqlite3.Connection | None = None
-        try:
-            connection = sqlite3.connect(
-                self._database_path,
-                timeout=self._timeout_seconds,
-                isolation_level=None,
-            )
-            connection.row_factory = sqlite3.Row
-            connection.execute("PRAGMA foreign_keys = ON")
-            connection.execute(f"PRAGMA busy_timeout = {int(self._timeout_seconds * 1000)}")
-            mode = str(connection.execute("PRAGMA journal_mode = WAL").fetchone()[0]).lower()
-            if mode != "wal":
-                raise IdempotencyStorageError()
-            connection.execute("PRAGMA synchronous = NORMAL")
-            return connection
-        except IdempotencyStorageError:
-            if connection is not None:
-                connection.close()
-            raise
-        except sqlite3.Error as exc:
-            if connection is not None:
-                connection.close()
-            raise IdempotencyStorageError() from exc
+        return self._database.connect(IdempotencyStorageError)
 
-    @contextmanager
     def _write_transaction(
         self,
         *,
         validate_schema: bool = True,
-    ) -> Iterator[sqlite3.Connection]:
-        connection = self._connect()
-        try:
-            connection.execute("BEGIN IMMEDIATE")
-            if validate_schema:
-                self._validate_schema(connection)
-            yield connection
-            connection.commit()
-        except IdempotencyError:
-            connection.rollback()
-            raise
-        except sqlite3.Error as exc:
-            connection.rollback()
-            raise IdempotencyStorageError() from exc
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
+    ) -> AbstractContextManager[sqlite3.Connection]:
+        return self._database.immediate_transaction(
+            IdempotencyStorageError,
+            pass_through=(IdempotencyError,),
+            before_write=self._validate_schema if validate_schema else None,
+        )
 
     @staticmethod
     def _select_identity(

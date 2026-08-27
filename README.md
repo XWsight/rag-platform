@@ -121,6 +121,9 @@ npm run test:browser
 ```
 
 它覆盖访问密钥连接、文档上传和索引完成、问答与引用、资料详情、会话清空、删除，以及云端授权默认关闭与显式确认。`scripts/check.ps1` 也会运行该套件。
+浏览器脚本优先使用 `.venv`；未创建时 Windows 会尝试已安装的 Python 3.11。也可以通过
+`$env:PYTHON='C:\path\to\python.exe'` 显式指定 Python 3.11/3.12 解释器。缺少 Playwright
+依赖时，脚本会提示先执行 `npm ci`。
 Node 工具链固定为 Node 24 与 npm 11；`npm ci` 会拒绝不匹配的锁文件。
 依赖漏洞审计默认最多运行 120 秒；网络受限或 CI 环境可用 `python scripts\audit_dependencies.py --timeout-seconds 180` 在 30–300 秒内调整，超时仍会失败关闭并回收子进程。
 

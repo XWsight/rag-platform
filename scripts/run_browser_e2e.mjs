@@ -1,12 +1,48 @@
 import {spawn, spawnSync} from "node:child_process";
+import {existsSync} from "node:fs";
 import {resolve} from "node:path";
 
 const port = 4173;
 const baseUrl = `http://127.0.0.1:${port}`;
-const python = process.env.PYTHON || (process.platform === "win32"
-  ? resolve(".venv", "Scripts", "python.exe")
-  : "python");
 const playwrightCli = resolve("node_modules", "@playwright", "test", "cli.js");
+
+function selectPython() {
+  const configured = process.env.PYTHON?.trim();
+  if (configured) return {command: configured, prefixArguments: []};
+
+  const virtualEnvironmentPython = process.platform === "win32"
+    ? resolve(".venv", "Scripts", "python.exe")
+    : resolve(".venv", "bin", "python");
+  if (existsSync(virtualEnvironmentPython)) {
+    return {command: virtualEnvironmentPython, prefixArguments: []};
+  }
+
+  if (process.platform === "win32") {
+    return {command: "py", prefixArguments: ["-3.11"]};
+  }
+  return {command: "python3", prefixArguments: []};
+}
+
+function assertSupportedPython(python) {
+  const result = spawnSync(
+    python.command,
+    [...python.prefixArguments, "-c", "import sys; raise SystemExit(0 if (3, 11) <= sys.version_info[:2] < (3, 13) else 1)"],
+    {encoding: "utf8", windowsHide: true},
+  );
+  if (result.error || result.status !== 0) {
+    const detail = [result.error?.message, result.stderr?.trim()].filter(Boolean).join("; ");
+    throw new Error(
+      `Browser E2E requires Python 3.11 or 3.12. Create .venv or set PYTHON to a supported interpreter.${detail ? ` (${detail})` : ""}`,
+    );
+  }
+}
+
+if (!existsSync(playwrightCli)) {
+  throw new Error("Browser test dependencies are missing. Run npm ci before npm run test:browser.");
+}
+
+const python = selectPython();
+assertSupportedPython(python);
 
 function sleep(milliseconds) {
   return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
@@ -46,8 +82,8 @@ function stopProcessTree(server) {
 }
 
 const server = spawn(
-  python,
-  ["-m", "uvicorn", "tests.browser_e2e_app:app", "--host", "127.0.0.1", "--port", String(port)],
+  python.command,
+  [...python.prefixArguments, "-m", "uvicorn", "tests.browser_e2e_app:app", "--host", "127.0.0.1", "--port", String(port)],
   {stdio: "inherit", windowsHide: true},
 );
 const startupError = {value: null};
