@@ -6,6 +6,14 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, BinaryIO, Protocol
 
+from rag_system.application_contracts import (
+    Application,
+    ApplicationRevision,
+    AuditEvent,
+    Deployment,
+    Project,
+    ResourceBinding,
+)
 from rag_system.knowledge_base_contracts import (
     DocumentManifest,
     KnowledgeBaseErrorCode,
@@ -18,6 +26,55 @@ from rag_system.ingestion import IngestionResult
 from rag_system.job_contracts import CancellationToken, JobId, JobRuntimeSnapshot, JobSnapshot
 from rag_system.ports import Retriever
 from rag_system.tenancy import Principal
+
+
+class ApplicationRepository(Protocol):
+    """Persistence port for tenant-scoped, versioned applications."""
+
+    def create_project(self, principal: Principal, project: Project) -> Project: ...
+
+    def get_project(self, principal: Principal, project_id: str) -> Project: ...
+
+    def list_projects(self, principal: Principal, *, limit: int = 50) -> tuple[Project, ...]: ...
+
+    def create_application(self, principal: Principal, application: Application) -> Application: ...
+
+    def get_application(self, principal: Principal, application_id: str) -> Application: ...
+
+    def list_applications(
+        self, principal: Principal, project_id: str, *, limit: int = 50
+    ) -> tuple[Application, ...]: ...
+
+    def create_revision(
+        self,
+        principal: Principal,
+        revision: ApplicationRevision,
+        bindings: Sequence[ResourceBinding],
+    ) -> ApplicationRevision: ...
+
+    def get_revision(
+        self, principal: Principal, application_id: str, revision_id: str
+    ) -> ApplicationRevision: ...
+
+    def list_revisions(
+        self, principal: Principal, application_id: str, *, limit: int = 50
+    ) -> tuple[ApplicationRevision, ...]: ...
+
+    def list_bindings(
+        self, principal: Principal, application_id: str, revision_id: str
+    ) -> tuple[ResourceBinding, ...]: ...
+
+    def create_deployment(self, principal: Principal, deployment: Deployment) -> Deployment: ...
+
+    def get_deployment(self, principal: Principal, deployment_id: str) -> Deployment: ...
+
+    def list_deployments(
+        self, principal: Principal, application_id: str, *, limit: int = 50
+    ) -> tuple[Deployment, ...]: ...
+
+    def record_audit_event(self, principal: Principal, event: AuditEvent) -> AuditEvent: ...
+
+    def list_audit_events(self, principal: Principal, *, limit: int = 50) -> tuple[AuditEvent, ...]: ...
 
 
 class KnowledgeBaseRepository(Protocol):
@@ -210,6 +267,7 @@ class KnowledgeService(Protocol):
 
 
 __all__ = [
+    "ApplicationRepository",
     "DocumentStore",
     "IdempotencyRepository",
     "IndexLifecycle",

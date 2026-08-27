@@ -8,10 +8,12 @@ from rag_system.application_contracts import (
     APPLICATION_CONFIGURATION_SCHEMA_VERSION,
     AnswerPolicy,
     Application,
+    ApplicationAuditEventType,
     ApplicationKind,
     ApplicationRevision,
     ApplicationStatus,
     ApplicationValidationError,
+    AuditEvent,
     Deployment,
     DeploymentEnvironment,
     KnowledgeChatConfiguration,
@@ -30,6 +32,7 @@ APPLICATION_ID = "app_12345678901234567890123456789012"
 REVISION_ID = "rev_12345678901234567890123456789012"
 DEPLOYMENT_ID = "dep_12345678901234567890123456789012"
 BINDING_ID = "bind_12345678901234567890123456789012"
+AUDIT_EVENT_ID = "audit_12345678901234567890123456789012"
 KNOWLEDGE_BASE_ID = "kb_12345678901234567890123456789012"
 
 
@@ -177,6 +180,30 @@ class ApplicationContractTests(unittest.TestCase):
                 resource_id="not-a-kb",
                 access_mode=ResourceAccessMode.READ,
                 created_at=4.0,
+            )
+
+    def test_audit_events_are_tenant_bound_and_allow_only_safe_metadata(self) -> None:
+        event = AuditEvent(
+            audit_event_id=AUDIT_EVENT_ID,
+            tenant_id=TENANT,
+            event_type=ApplicationAuditEventType.REVISION_CREATED,
+            occurred_at=5.0,
+            actor="operator@example.com",
+            summary="Created the first revision.",
+            project_id=PROJECT_ID,
+            application_id=APPLICATION_ID,
+            revision_id=REVISION_ID,
+        )
+
+        self.assertEqual(event.event_type, ApplicationAuditEventType.REVISION_CREATED)
+        with self.assertRaises(ApplicationValidationError):
+            AuditEvent(
+                audit_event_id=AUDIT_EVENT_ID,
+                tenant_id=TENANT,
+                event_type="revision_created",  # type: ignore[arg-type]
+                occurred_at=5.0,
+                actor="operator@example.com",
+                summary="Unsafe\x01 detail",
             )
 
     def test_contract_rejects_non_finite_timestamps_and_unsafe_metadata(self) -> None:
