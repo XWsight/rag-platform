@@ -40,11 +40,12 @@ class ApplicationContractTests(unittest.TestCase):
     def test_typed_knowledge_chat_configuration_normalizes_and_is_immutable(self) -> None:
         configuration = KnowledgeChatConfiguration(
             knowledge_base_ids=[KNOWLEDGE_BASE_ID],
-            answer_policy=AnswerPolicy(require_citations=True),
+            answer_policy=AnswerPolicy(require_citations=True, allow_cloud=True),
             session_policy=SessionPolicy(ttl_seconds=3_600),
         )
 
         self.assertEqual(configuration.knowledge_base_ids, (KNOWLEDGE_BASE_ID,))
+        self.assertTrue(configuration.answer_policy.allow_cloud)
         with self.assertRaises(FrozenInstanceError):
             configuration.knowledge_base_ids = ()  # type: ignore[misc]
 

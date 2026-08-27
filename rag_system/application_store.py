@@ -38,7 +38,7 @@ from rag_system.sqlite_support import SqliteDatabase
 from rag_system.tenancy import Principal, TenantId
 
 
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 _MAX_LIST_LIMIT = 100
 _MAX_CONFIGURATION_BYTES = 64 * 1024
 
@@ -476,9 +476,26 @@ class ApplicationStore:
                     raise ApplicationStoreSchemaError()
                 connection.executescript(_CREATE_SCHEMA_SQL)
                 connection.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
+            elif version == 1:
+                self._validate_schema(connection)
+                self._migrate_v1_to_v2(connection)
             elif version != _SCHEMA_VERSION:
                 raise ApplicationStoreSchemaError()
             self._validate_schema(connection)
+
+    @staticmethod
+    def _migrate_v1_to_v2(connection: sqlite3.Connection) -> None:
+        """Add the explicit cloud-answer policy to every legacy configuration."""
+        rows = connection.execute(
+            "SELECT revision_id, configuration_json FROM application_revisions"
+        ).fetchall()
+        for row in rows:
+            configuration = _decode_v1_configuration(row["configuration_json"])
+            connection.execute(
+                "UPDATE application_revisions SET configuration_json = ? WHERE revision_id = ?",
+                (_encode_configuration(configuration), row["revision_id"]),
+            )
+        connection.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
 
     @staticmethod
     def _validate_schema(connection: sqlite3.Connection) -> None:
@@ -834,6 +851,7 @@ def _validate_publish_audit_event(
 def _encode_configuration(configuration: KnowledgeChatConfiguration) -> str:
     payload = {
         "answer_policy": {
+            "allow_cloud": configuration.answer_policy.allow_cloud,
             "allow_research": configuration.answer_policy.allow_research,
             "allow_web": configuration.answer_policy.allow_web,
             "require_citations": configuration.answer_policy.require_citations,
@@ -851,6 +869,33 @@ def _encode_configuration(configuration: KnowledgeChatConfiguration) -> str:
 
 
 def _decode_configuration(value: object) -> KnowledgeChatConfiguration:
+    if not isinstance(value, str) or len(value.encode("utf-8")) > _MAX_CONFIGURATION_BYTES:
+        raise ApplicationStoreSchemaError()
+    try:
+        payload = json.loads(value, object_pairs_hook=_strict_json_object)
+        if not isinstance(payload, dict) or set(payload) != {
+            "knowledge_base_ids", "answer_policy", "session_policy"
+        }:
+            raise ValueError
+        answer = payload["answer_policy"]
+        session = payload["session_policy"]
+        if not isinstance(answer, dict) or set(answer) != {
+            "require_citations", "allow_cloud", "allow_web", "allow_research"
+        }:
+            raise ValueError
+        if not isinstance(session, dict) or set(session) != {"enabled", "ttl_seconds"}:
+            raise ValueError
+        return KnowledgeChatConfiguration(
+            knowledge_base_ids=tuple(payload["knowledge_base_ids"]),
+            answer_policy=AnswerPolicy(**answer),
+            session_policy=SessionPolicy(**session),
+        )
+    except (ApplicationContractError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise ApplicationStoreSchemaError() from error
+
+
+def _decode_v1_configuration(value: object) -> KnowledgeChatConfiguration:
+    """Decode the original configuration shape during the one-way store migration."""
     if not isinstance(value, str) or len(value.encode("utf-8")) > _MAX_CONFIGURATION_BYTES:
         raise ApplicationStoreSchemaError()
     try:

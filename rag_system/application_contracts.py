@@ -75,11 +75,12 @@ class AnswerPolicy:
     """Answer behaviour that can be audited as part of a revision."""
 
     require_citations: bool = True
+    allow_cloud: bool = False
     allow_web: bool = False
     allow_research: bool = False
 
     def __post_init__(self) -> None:
-        for field_name in ("require_citations", "allow_web", "allow_research"):
+        for field_name in ("require_citations", "allow_cloud", "allow_web", "allow_research"):
             if not isinstance(getattr(self, field_name), bool):
                 raise ApplicationValidationError(f"{field_name} must be a boolean.")
 
