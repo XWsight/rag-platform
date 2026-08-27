@@ -323,6 +323,16 @@ class CatalogTests(unittest.TestCase):
         with self.assertRaises(CatalogSchemaError):
             KnowledgeBaseCatalog(incompatible)
 
+    def test_missing_idempotency_unique_index_is_rejected_on_restart(self) -> None:
+        """A matching column layout alone cannot preserve exactly-once recovery."""
+
+        with closing(sqlite3.connect(self.database)) as connection:
+            connection.execute("DROP INDEX idx_knowledge_bases_idempotency")
+            connection.commit()
+
+        with self.assertRaises(CatalogSchemaError):
+            KnowledgeBaseCatalog(self.database)
+
     def test_schema_v2_and_v3_are_migrated_without_losing_records(self) -> None:
         for source_version in (2, 3):
             with self.subTest(source_version=source_version):

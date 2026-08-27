@@ -452,8 +452,22 @@ class KnowledgeBaseCatalog:
             (row["name"], row["type"].upper(), int(row["notnull"]), int(row["pk"]))
             for row in rows
         )
-        if actual != _EXPECTED_COLUMNS:
+        indexes = {
+            str(row["name"]): (int(row["unique"]), int(row["partial"]))
+            for row in connection.execute("PRAGMA index_list(knowledge_bases)").fetchall()
+        }
+        if actual != _EXPECTED_COLUMNS or any(
+            indexes.get(name) != (unique, partial)
+            for name, unique, partial in _EXPECTED_CUSTOM_INDEXES
+        ):
             raise CatalogSchemaError()
+        for name, _, _ in _EXPECTED_CUSTOM_INDEXES:
+            columns = tuple(
+                str(row["name"])
+                for row in connection.execute(f"PRAGMA index_info({name})").fetchall()
+            )
+            if columns != _EXPECTED_INDEX_COLUMNS[name]:
+                raise CatalogSchemaError()
 
     def _owned_record(
         self,
@@ -593,6 +607,16 @@ _EXPECTED_COLUMNS = (
     ("version", "INTEGER", 1, 0),
     ("idempotency_reservation_id", "TEXT", 0, 0),
 )
+
+_EXPECTED_CUSTOM_INDEXES = (
+    ("idx_knowledge_bases_tenant_updated", 0, 0),
+    ("idx_knowledge_bases_idempotency", 1, 1),
+)
+
+_EXPECTED_INDEX_COLUMNS = {
+    "idx_knowledge_bases_tenant_updated": ("tenant_id", "updated_at", "resource_id"),
+    "idx_knowledge_bases_idempotency": ("tenant_id", "idempotency_reservation_id"),
+}
 
 
 def _principal_tenant(principal: Principal) -> TenantId:
