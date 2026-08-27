@@ -36,7 +36,9 @@ class InitDerivativeTests(unittest.TestCase):
             self.assertTrue((created / "README.md").is_file())
             compatibility = created / "compatibility.json"
             self.assertTrue(compatibility.is_file())
-            self.assertTrue(validate_compatibility(compatibility, base_root=Path.cwd())["compatible"])
+            compatibility_result = validate_compatibility(compatibility, base_root=Path.cwd())
+            self.assertTrue(compatibility_result["compatible"])
+            self.assertFalse(compatibility_result["identity_upgrade_available"])
             provider_factory = (created / "provider_factory.py").read_text(encoding="utf-8")
             self.assertIn("class LegalAssistantProviderFactory", provider_factory)
             self.assertNotIn("{{", provider_factory)
@@ -91,7 +93,9 @@ class InitDerivativeTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            self.assertTrue(validate_compatibility(manifest, base_root=Path.cwd())["compatible"])
+            result = validate_compatibility(manifest, base_root=Path.cwd())
+            self.assertTrue(result["compatible"])
+            self.assertTrue(result["identity_upgrade_available"])
 
     def test_accepts_an_explicit_base_revision_for_a_reproducible_baseline(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -43,7 +43,13 @@ def validate_compatibility(path: Path, *, base_root: Path) -> dict[str, object]:
         raise DerivativeCompatibilityError("base package metadata is unavailable") from error
     if not isinstance(version, str) or not version.startswith("2."):
         raise DerivativeCompatibilityError("base package major is incompatible")
-    return {"base_version": version, "base_revision": payload["base_revision"], "compatible": True}
+    uses_legacy_identity = payload["base_project"] == "rag-studio"
+    return {
+        "base_version": version,
+        "base_revision": payload["base_revision"],
+        "compatible": True,
+        "identity_upgrade_available": uses_legacy_identity,
+    }
 
 
 def _strict_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

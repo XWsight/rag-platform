@@ -79,7 +79,16 @@ const ui = {
 
 function readSession(key, legacyKey = "") {
   try {
-    return window.sessionStorage.getItem(key) || window.sessionStorage.getItem(legacyKey) || "";
+    const currentValue = window.sessionStorage.getItem(key);
+    if (currentValue) return currentValue;
+    const legacyValue = legacyKey ? window.sessionStorage.getItem(legacyKey) : "";
+    if (!legacyValue) return "";
+    try {
+      window.sessionStorage.setItem(key, legacyValue);
+    } catch {
+      // Reading the legacy value remains safe even if storage has become read-only.
+    }
+    return legacyValue;
   } catch {
     return "";
   }
