@@ -131,6 +131,21 @@ class JobManagerTests(unittest.TestCase):
         self.assertEqual(cancelled.status, JobStatus.CANCELLED)
         self.assertEqual(manager.stats("owner")["cancelled"], 1)
 
+    def test_operational_snapshot_contains_only_aggregate_active_queue_state(self) -> None:
+        now = [10.0]
+        manager, executor = self.make_manager(clock=lambda: now[0])
+        manager.submit("tenant-a", lambda token: {"ok": True}, idempotency_key="first")
+        now[0] = 13.5
+        manager.submit("tenant-b", lambda token: {"ok": True}, idempotency_key="second")
+
+        snapshot = manager.operational_snapshot()
+
+        self.assertEqual(snapshot.queue_depth, 2)
+        self.assertEqual(snapshot.active_count, 2)
+        self.assertEqual(snapshot.oldest_active_age_seconds, 3.5)
+        executor.run_next()
+        self.assertEqual(manager.operational_snapshot().queue_depth, 1)
+
     def test_capacity_never_evicts_active_jobs_but_reuses_terminal_space(self) -> None:
         manager, executor = self.make_manager(max_jobs=2)
         first = manager.submit("t", lambda token: {"n": 1}, idempotency_key="1")

@@ -21,6 +21,7 @@ from rag_system.job_contracts import (
     JobId,
     JobManagerShutdownError,
     JobNotFoundError,
+    JobRuntimeSnapshot,
     JobSnapshot,
     JobSnapshotRepository,
     JobStatus,
@@ -268,6 +269,20 @@ class JobManager:
                 status.value: sum(record.status is status for record in records)
                 for status in JobStatus
             }
+
+    def operational_snapshot(self) -> JobRuntimeSnapshot:
+        """Return aggregate queue state without exposing tenant or job identifiers."""
+
+        with self._lock:
+            now = self._now()
+            self._cleanup_expired_locked(now)
+            active = tuple(record for record in self._jobs.values() if not record.status.terminal)
+            oldest_created_at = min((record.created_at for record in active), default=now)
+            return JobRuntimeSnapshot(
+                queue_depth=sum(record.status is JobStatus.QUEUED for record in active),
+                active_count=len(active),
+                oldest_active_age_seconds=max(0.0, now - oldest_created_at) if active else 0.0,
+            )
 
     def shutdown(self, *, wait: bool = True, cancel_pending: bool = True) -> None:
         """Reject new work and optionally mark unfinished work as cancelled."""

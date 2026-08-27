@@ -21,6 +21,21 @@ docker compose exec api sh -c 'du -sh /data/* 2>/dev/null || true'
 `operator` Key、Prometheus 网络边界、阈值校准，以及应用未直接暴露的磁盘、重启、备份和
 任务积压信号见[监控说明](monitoring.md)。
 
+### 发布后只读业务探针
+
+`live`、`ready` 与指标采集不能证明认证边界和核心只读 API 都可用。每次部署恢复流量前，
+使用最小权限的 `reader` API Key，在受控运行环境执行：
+
+```bash
+python scripts/verify_runtime_probe.py \
+  --base-url http://127.0.0.1:8000 \
+  --api-key-file /run/secrets/rag-platform-reader.token
+```
+
+探针只调用 `/health/live`、`/health/ready` 与租户范围内的 `GET /v1/knowledge-bases`；
+不会上传、索引、回答或输出密钥。它只输出已通过的检查名称和目标地址。将其纳入部署编排或监控
+系统时，密钥文件必须由执行身份独占读取，且输出日志不得附带命令行中的密钥。
+
 应用事件日志使用结构化字段并主动避开问题正文、文档正文和密钥。容器日志采用本地轮转驱动，但日志仍应按组织策略转存与控制访问。
 
 ## 一致性备份

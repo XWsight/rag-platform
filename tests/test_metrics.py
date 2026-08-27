@@ -134,6 +134,8 @@ class MetricRegistryTests(unittest.TestCase):
         self.assertNotIn("raw-tenant-id", rendered)
         self.assertIn("rag_requests_total", rendered)
         self.assertIn("rag_external_call_errors_total", rendered)
+        self.assertIn("rag_job_queue_depth", rendered)
+        self.assertIn("rag_job_oldest_active_seconds", rendered)
 
     def test_invalid_numeric_updates_do_not_create_series(self) -> None:
         registry = MetricRegistry()

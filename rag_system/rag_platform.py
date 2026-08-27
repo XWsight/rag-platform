@@ -82,6 +82,14 @@ class RagPlatform:
         self._close_lock = Lock()
         self._closed = False
 
+    def refresh_operational_metrics(self) -> None:
+        """Refresh bounded runtime gauges immediately before a metrics scrape."""
+
+        snapshot = self.jobs.operational_snapshot()
+        self.metrics.job_queue_depth.set(snapshot.queue_depth)
+        self.metrics.job_active_count.set(snapshot.active_count)
+        self.metrics.job_oldest_active_seconds.set(snapshot.oldest_active_age_seconds)
+
     def create_knowledge_base(
         self,
         principal: Principal,

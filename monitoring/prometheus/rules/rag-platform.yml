@@ -45,6 +45,24 @@ groups:
           summary: A RAG Platform index build failed
           description: Inspect the affected job and storage capacity before retrying the import.
 
+      - alert: RAGJobQueueStalled
+        expr: rag_job_queue_depth > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: RAG Platform background work remains queued
+          description: Check worker availability, storage health, and the oldest active job before increasing capacity.
+
+      - alert: RAGJobLifecycleStalled
+        expr: rag_job_oldest_active_seconds > 1800
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: RAG Platform has a long-running non-terminal job
+          description: Inspect the sanitized job state, cancellation flow, provider availability, and storage capacity.
+
       - alert: RAGRateLimitPressure
         expr: sum(rate(rag_requests_total{outcome="rate_limited"}[5m])) / clamp_min(sum(rate(rag_requests_total[5m])), 0.01) > 0.10
         for: 10m

@@ -23,6 +23,29 @@ class JobStatus(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class JobRuntimeSnapshot:
+    """Aggregate, tenant-free queue state suitable for operational metrics."""
+
+    queue_depth: int
+    active_count: int
+    oldest_active_age_seconds: float
+
+    def __post_init__(self) -> None:
+        if any(
+            isinstance(value, bool) or not isinstance(value, int) or value < 0
+            for value in (self.queue_depth, self.active_count)
+        ):
+            raise ValueError("job runtime counts must be non-negative integers")
+        if (
+            isinstance(self.oldest_active_age_seconds, bool)
+            or not isinstance(self.oldest_active_age_seconds, (int, float))
+            or not math.isfinite(float(self.oldest_active_age_seconds))
+            or self.oldest_active_age_seconds < 0
+        ):
+            raise ValueError("job runtime age must be finite and non-negative")
+
+
+@dataclass(frozen=True, slots=True)
 class JobId:
     value: str
 
@@ -178,6 +201,7 @@ __all__ = [
     "JobId",
     "JobManagerShutdownError",
     "JobNotFoundError",
+    "JobRuntimeSnapshot",
     "JobSnapshot",
     "JobSnapshotRepository",
     "JobStatus",
