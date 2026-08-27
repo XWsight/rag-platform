@@ -7,6 +7,7 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path
+from unittest.mock import patch
 
 from rag_system.job_contracts import (
     JobId,
@@ -195,6 +196,23 @@ class JobSnapshotStoreTests(unittest.TestCase):
 
         with self.assertRaises(JobStorageError):
             SqliteJobSnapshotStore(self.database)
+
+    def test_schema_initialization_rolls_back_when_validation_fails(self) -> None:
+        with patch.object(
+            SqliteJobSnapshotStore,
+            "_validate_schema",
+            side_effect=JobStorageError("injected validation failure"),
+        ):
+            with self.assertRaises(JobStorageError):
+                SqliteJobSnapshotStore(self.database)
+
+        with closing(sqlite3.connect(self.database)) as connection:
+            tables = connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+            version = connection.execute("PRAGMA user_version").fetchone()[0]
+        self.assertEqual(tables, [])
+        self.assertEqual(version, 0)
 
     @staticmethod
     def _wait_for_terminal(manager: JobManager, job_id: JobId) -> None:

@@ -170,31 +170,26 @@ class SqliteJobSnapshotStore:
             return False
 
     def _initialize(self) -> None:
-        with self._write_lock:
-            try:
-                with self._connection() as connection:
-                    tables = {
-                        str(row[0])
-                        for row in connection.execute(
-                            "SELECT name FROM sqlite_master WHERE type = 'table'"
-                        ).fetchall()
-                    }
-                    version = int(connection.execute("PRAGMA user_version").fetchone()[0])
-                    if not tables and version == 0:
-                        connection.execute(_CREATE_TABLE_SQL)
-                        connection.execute(
-                            "CREATE INDEX idx_job_snapshots_tenant_updated "
-                            "ON job_snapshots (tenant_id, updated_at)"
-                        )
-                        connection.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
-                    elif tables != {"job_snapshots"} or version != _SCHEMA_VERSION:
-                        raise JobStorageError("job snapshot schema is invalid")
-                    self._validate_schema(connection)
-                    connection.commit()
-            except JobStorageError:
-                raise
-            except sqlite3.Error as error:
-                raise JobStorageError("job snapshot storage initialization failed") from error
+        """Create or validate the snapshot schema as one atomic write."""
+
+        with self._write_lock, self._transaction() as connection:
+            tables = {
+                str(row[0])
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                ).fetchall()
+            }
+            version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+            if not tables and version == 0:
+                connection.execute(_CREATE_TABLE_SQL)
+                connection.execute(
+                    "CREATE INDEX idx_job_snapshots_tenant_updated "
+                    "ON job_snapshots (tenant_id, updated_at)"
+                )
+                connection.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
+            elif tables != {"job_snapshots"} or version != _SCHEMA_VERSION:
+                raise JobStorageError("job snapshot schema is invalid")
+            self._validate_schema(connection)
 
     @staticmethod
     def _validate_schema(connection: sqlite3.Connection) -> None:

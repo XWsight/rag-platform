@@ -382,6 +382,31 @@ class CatalogTests(unittest.TestCase):
             KnowledgeBaseStatus.PREPARING,
         )
 
+    def test_rejected_legacy_migration_preserves_the_original_database(self) -> None:
+        record = self.catalog.create(self.tenant_a, "corrupted legacy record")
+        with closing(sqlite3.connect(self.database)) as connection:
+            connection.execute("DROP INDEX idx_knowledge_bases_idempotency")
+            connection.execute("PRAGMA user_version = 3")
+            connection.commit()
+
+        with self.assertRaises(CatalogSchemaError):
+            KnowledgeBaseCatalog(self.database)
+
+        with closing(sqlite3.connect(self.database)) as connection:
+            tables = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                ).fetchall()
+            }
+            version = connection.execute("PRAGMA user_version").fetchone()[0]
+            stored_id = connection.execute(
+                "SELECT resource_id FROM knowledge_bases"
+            ).fetchone()[0]
+        self.assertEqual(tables, {"knowledge_bases"})
+        self.assertEqual(version, 3)
+        self.assertEqual(stored_id, record.resource_id)
+
     def test_connection_is_closed_when_pragma_initialization_fails(self) -> None:
         connection = MagicMock()
         connection.execute.side_effect = sqlite3.OperationalError("disk unavailable")
