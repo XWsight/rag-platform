@@ -43,6 +43,7 @@ jobs:
           ruff check .
           mypy
           python scripts/verify_wheel.py
+          python scripts/verify_openapi_contract.py
       - name: Deterministic retrieval quality gate
         run: >-
           python scripts/benchmark_sparse.py
@@ -327,3 +328,32 @@ jobs:
             RAG_PUBLISHED_PORT=8012 docker compose -p rag-platform-restore down --volumes --remove-orphans
           docker volume rm rag-platform-restore-${{ github.run_id }}-${{ github.run_attempt }} || true
           docker compose -p rag-platform-ci down --volumes --remove-orphans
+
+  quality-gate:
+    if: always()
+    needs:
+      - unit-tests
+      - declared-development-environment
+      - locked-runtime
+      - browser-contract
+      - browser-e2e
+      - dependency-audit
+      - runtime-sbom
+      - release-manifest
+      - recovery-and-durability
+      - container-smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every quality job to succeed
+        shell: bash
+        run: |
+          test "${{ needs.unit-tests.result }}" = "success"
+          test "${{ needs.declared-development-environment.result }}" = "success"
+          test "${{ needs.locked-runtime.result }}" = "success"
+          test "${{ needs.browser-contract.result }}" = "success"
+          test "${{ needs.browser-e2e.result }}" = "success"
+          test "${{ needs.dependency-audit.result }}" = "success"
+          test "${{ needs.runtime-sbom.result }}" = "success"
+          test "${{ needs.release-manifest.result }}" = "success"
+          test "${{ needs.recovery-and-durability.result }}" = "success"
+          test "${{ needs.container-smoke.result }}" = "success"

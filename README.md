@@ -313,10 +313,13 @@ rag_system/
   api_errors.py       # 应用失败到公共 HTTP 错误的集中映射
   web_ui.py           # 同源产品界面的安全挂载与响应头
   web_ui/             # 知识库管理、任务进度、问答和引用展示前端
-  platform.py         # 应用门面：多租户用例、幂等与恢复编排
+  rag_platform.py     # 应用门面：多租户用例、幂等与恢复编排
+  runtime_bootstrap.py # 默认 Profile 的受控组合根与启动恢复
+  knowledge_base_lifecycle.py # 建库、删除、取消、幂等重放与恢复编排
+  answer_workflow.py  # 问答容量控制、索引恢复与会话隔离
   submission.py       # 上传物化、大小策略、请求摘要和文档 ID
   coordination.py     # 有界分片锁与双向 resource-job 登记
-  assets.py           # 文档清单、存储结果、路径和内容一致性边界
+  knowledge_base_assets.py # 文档清单、存储结果、路径和内容一致性边界
   indexing.py         # 耐久索引状态机、取消语义和失败补偿
   catalog.py          # SQLite 知识库目录与状态机
   idempotency.py      # 持久化幂等 reservation
@@ -337,7 +340,7 @@ rag_system/
   answer_protocol.py  # 可替换的提示、证据边界与严格输出解码协议
   provider_errors.py  # 应用层与外部服务适配器共享的稳定失败契约
   json_contract.py    # 拒绝重复键和非有限值的严格 JSON 边界
-  service.py          # 问答、联网、研究模式、引用和会话编排
+  rag_service.py      # 检索、联网、研究模式、引用和会话编排
   grounding.py        # 原子结论、证据归因校验与稳定渲染
   metrics.py          # 有界 Prometheus 指标
   observability.py    # 不记录问题/文档正文的结构化事件
@@ -369,4 +372,4 @@ tests/                # 单元、隔离、并发、故障与 API 契约测试
 
 ## 贡献与许可
 
-版本变化见 [CHANGELOG.md](CHANGELOG.md)，贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。本项目使用 [MIT 许可证](LICENSE)。
+版本变化见 [CHANGELOG.md](CHANGELOG.md)，稳定发布与兼容性政策见 [RELEASE.md](RELEASE.md)，贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。本项目使用 [MIT 许可证](LICENSE)。
