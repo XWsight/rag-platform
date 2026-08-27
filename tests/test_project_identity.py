@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import tomllib
 import unittest
 from pathlib import Path
@@ -48,6 +49,30 @@ class ProjectIdentityTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         retired_modules = {"assets.py", "bootstrap.py", "platform.py", "service.py", "ui.py", "web.py"}
         self.assertEqual(retired_modules & {path.name for path in (root / "rag_system").glob("*.py")}, set())
+
+    def test_public_assets_do_not_reference_retired_v3_module_names(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        retired_modules = {"assets.py", "bootstrap.py", "platform.py", "service.py", "ui.py", "web.py"}
+        retired_pattern = re.compile(
+            r"(?<![A-Za-z0-9_])(?:"
+            + "|".join(re.escape(name) for name in retired_modules)
+            + r")(?![A-Za-z0-9_])"
+        )
+        candidates = [root / name for name in ("README.md", "CHANGELOG.md", "CONTRIBUTING.md", "RELEASE.md")]
+        for directory in (root / ".github", root / "docs", root / "templates"):
+            candidates.extend(
+                path
+                for path in directory.rglob("*")
+                if path.is_file() and path.suffix in {".json", ".md", ".template", ".yaml", ".yml"}
+            )
+
+        violations = [
+            str(path.relative_to(root))
+            for path in candidates
+            if path.is_file()
+            and retired_pattern.search(path.read_text(encoding="utf-8")) is not None
+        ]
+        self.assertEqual(violations, [])
 
     def test_source_and_public_assets_do_not_reference_the_retired_product_identity(self) -> None:
         root = Path(__file__).resolve().parents[1]

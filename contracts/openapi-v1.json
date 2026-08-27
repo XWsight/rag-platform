@@ -1,0 +1,1739 @@
+{
+  "openapi": {
+    "components": {
+      "schemas": {
+        "AnswerClaimResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "citation_ids": {
+              "items": {
+                "maxLength": 16,
+                "minLength": 2,
+                "pattern": "^[LW][1-9]\\d*$",
+                "type": "string"
+              },
+              "maxItems": 24,
+              "minItems": 1,
+              "title": "Citation Ids",
+              "type": "array"
+            },
+            "text": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Text",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text",
+            "citation_ids"
+          ],
+          "title": "AnswerClaimResponse",
+          "type": "object"
+        },
+        "AnswerResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "answer": {
+              "maxLength": 20000,
+              "title": "Answer",
+              "type": "string"
+            },
+            "citations": {
+              "items": {
+                "$ref": "#/components/schemas/CitationResponse"
+              },
+              "title": "Citations",
+              "type": "array"
+            },
+            "claims": {
+              "items": {
+                "$ref": "#/components/schemas/AnswerClaimResponse"
+              },
+              "maxItems": 24,
+              "title": "Claims",
+              "type": "array"
+            },
+            "decision": {
+              "$ref": "#/components/schemas/RouteResponse"
+            },
+            "latency_ms": {
+              "minimum": 0.0,
+              "title": "Latency Ms",
+              "type": "number"
+            },
+            "trace_id": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Trace Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "answer",
+            "decision",
+            "claims",
+            "citations",
+            "trace_id",
+            "latency_ms"
+          ],
+          "title": "AnswerResponse",
+          "type": "object"
+        },
+        "Body_create_knowledge_base_v1_knowledge_bases_post": {
+          "properties": {
+            "files": {
+              "description": "Documents to index",
+              "items": {
+                "format": "binary",
+                "type": "string"
+              },
+              "title": "Files",
+              "type": "array"
+            },
+            "name": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "files"
+          ],
+          "title": "Body_create_knowledge_base_v1_knowledge_bases_post",
+          "type": "object"
+        },
+        "CitationResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "excerpt": {
+              "maxLength": 8000,
+              "title": "Excerpt",
+              "type": "string"
+            },
+            "id": {
+              "maxLength": 16,
+              "minLength": 2,
+              "pattern": "^[LW][1-9]\\d*$",
+              "title": "Id",
+              "type": "string"
+            },
+            "score": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Score"
+            },
+            "source_name": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Source Name",
+              "type": "string"
+            },
+            "url": {
+              "default": "",
+              "maxLength": 4096,
+              "title": "Url",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "source_name",
+            "excerpt"
+          ],
+          "title": "CitationResponse",
+          "type": "object"
+        },
+        "ConfiguredAnswerPayload": {
+          "additionalProperties": false,
+          "properties": {
+            "allow_cloud": {
+              "default": false,
+              "title": "Allow Cloud",
+              "type": "boolean"
+            },
+            "allow_web": {
+              "default": false,
+              "title": "Allow Web",
+              "type": "boolean"
+            },
+            "deep_research": {
+              "default": false,
+              "title": "Deep Research",
+              "type": "boolean"
+            },
+            "knowledge_base_id": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+              "title": "Knowledge Base Id",
+              "type": "string"
+            },
+            "question": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Question",
+              "type": "string"
+            },
+            "session_id": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "knowledge_base_id",
+            "question",
+            "session_id"
+          ],
+          "title": "ConfiguredAnswerPayload",
+          "type": "object"
+        },
+        "DeleteResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "deleted": {
+              "title": "Deleted",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "deleted"
+          ],
+          "title": "DeleteResponse",
+          "type": "object"
+        },
+        "DocumentResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Sha256",
+              "type": "string"
+            },
+            "size_bytes": {
+              "minimum": 0.0,
+              "title": "Size Bytes",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "name",
+            "size_bytes",
+            "sha256"
+          ],
+          "title": "DocumentResponse",
+          "type": "object"
+        },
+        "ErrorDetail": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Code",
+              "type": "string"
+            },
+            "message": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Message",
+              "type": "string"
+            },
+            "request_id": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Request Id",
+              "type": "string"
+            },
+            "trace_id": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Trace Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "trace_id",
+            "request_id"
+          ],
+          "title": "ErrorDetail",
+          "type": "object"
+        },
+        "ErrorEnvelope": {
+          "additionalProperties": false,
+          "properties": {
+            "error": {
+              "$ref": "#/components/schemas/ErrorDetail"
+            }
+          },
+          "required": [
+            "error"
+          ],
+          "title": "ErrorEnvelope",
+          "type": "object"
+        },
+        "HealthResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "enum": [
+                "ok",
+                "ready"
+              ],
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          "required": [
+            "status"
+          ],
+          "title": "HealthResponse",
+          "type": "object"
+        },
+        "JobResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "created_at": {
+              "minimum": 0.0,
+              "title": "Created At",
+              "type": "number"
+            },
+            "error_code": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error Code"
+            },
+            "finished_at": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Finished At"
+            },
+            "id": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Id",
+              "type": "string"
+            },
+            "result": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Result"
+            },
+            "started_at": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Started At"
+            },
+            "status": {
+              "$ref": "#/components/schemas/JobStatus"
+            },
+            "updated_at": {
+              "minimum": 0.0,
+              "title": "Updated At",
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "status",
+            "created_at",
+            "updated_at"
+          ],
+          "title": "JobResponse",
+          "type": "object"
+        },
+        "JobStatus": {
+          "enum": [
+            "queued",
+            "running",
+            "cancelling",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ],
+          "title": "JobStatus",
+          "type": "string"
+        },
+        "KnowledgeBaseListResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "count": {
+              "minimum": 0.0,
+              "title": "Count",
+              "type": "integer"
+            },
+            "items": {
+              "items": {
+                "$ref": "#/components/schemas/KnowledgeBaseResponse"
+              },
+              "title": "Items",
+              "type": "array"
+            },
+            "limit": {
+              "maximum": 100.0,
+              "minimum": 1.0,
+              "title": "Limit",
+              "type": "integer"
+            },
+            "next_cursor": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Next Cursor"
+            },
+            "offset": {
+              "minimum": 0.0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "items",
+            "count",
+            "limit",
+            "offset"
+          ],
+          "title": "KnowledgeBaseListResponse",
+          "type": "object"
+        },
+        "KnowledgeBaseResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "chunk_count": {
+              "minimum": 0.0,
+              "title": "Chunk Count",
+              "type": "integer"
+            },
+            "created_at": {
+              "minimum": 0.0,
+              "title": "Created At",
+              "type": "number"
+            },
+            "document_count": {
+              "minimum": 0.0,
+              "title": "Document Count",
+              "type": "integer"
+            },
+            "documents": {
+              "items": {
+                "$ref": "#/components/schemas/DocumentResponse"
+              },
+              "title": "Documents",
+              "type": "array"
+            },
+            "error_code": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error Code"
+            },
+            "id": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Id",
+              "type": "string"
+            },
+            "name": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/components/schemas/KnowledgeBaseStatus"
+            },
+            "total_bytes": {
+              "minimum": 0.0,
+              "title": "Total Bytes",
+              "type": "integer"
+            },
+            "updated_at": {
+              "minimum": 0.0,
+              "title": "Updated At",
+              "type": "number"
+            },
+            "version": {
+              "minimum": 1.0,
+              "title": "Version",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "status",
+            "documents",
+            "document_count",
+            "total_bytes",
+            "chunk_count",
+            "created_at",
+            "updated_at",
+            "version"
+          ],
+          "title": "KnowledgeBaseResponse",
+          "type": "object"
+        },
+        "KnowledgeBaseStatus": {
+          "enum": [
+            "preparing",
+            "pending",
+            "indexing",
+            "cancelling",
+            "ready",
+            "failed",
+            "deleting"
+          ],
+          "title": "KnowledgeBaseStatus",
+          "type": "string"
+        },
+        "KnowledgeBaseSubmissionResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "job_id": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Job Id",
+              "type": "string"
+            },
+            "knowledge_base": {
+              "$ref": "#/components/schemas/KnowledgeBaseResponse"
+            },
+            "replayed": {
+              "title": "Replayed",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "knowledge_base",
+            "job_id",
+            "replayed"
+          ],
+          "title": "KnowledgeBaseSubmissionResponse",
+          "type": "object"
+        },
+        "Route": {
+          "enum": [
+            "local",
+            "web",
+            "hybrid",
+            "retrieval_only",
+            "refused",
+            "error"
+          ],
+          "title": "Route",
+          "type": "string"
+        },
+        "RouteResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "confidence": {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "route": {
+              "$ref": "#/components/schemas/Route"
+            }
+          },
+          "required": [
+            "route",
+            "confidence"
+          ],
+          "title": "RouteResponse",
+          "type": "object"
+        }
+      },
+      "securitySchemes": {
+        "ApiKeyAuth": {
+          "description": "A tenant-scoped service API key.",
+          "in": "header",
+          "name": "X-API-Key",
+          "type": "apiKey"
+        },
+        "BearerAuth": {
+          "bearerFormat": "API key",
+          "description": "The same tenant API key carried as a Bearer credential.",
+          "scheme": "bearer",
+          "type": "http"
+        }
+      }
+    },
+    "info": {
+      "title": "RAG Platform API"
+    },
+    "openapi": "3.1.0",
+    "paths": {
+      "/health/live": {
+        "get": {
+          "operationId": "live_health_live_get",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HealthResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          },
+          "summary": "Process liveness",
+          "tags": [
+            "health"
+          ]
+        }
+      },
+      "/health/ready": {
+        "get": {
+          "operationId": "ready_health_ready_get",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HealthResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "500": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Internal Server Error"
+            },
+            "503": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Service Unavailable"
+            }
+          },
+          "summary": "Local storage and job-manager readiness",
+          "tags": [
+            "health"
+          ]
+        }
+      },
+      "/metrics": {
+        "get": {
+          "operationId": "metrics_metrics_get",
+          "responses": {
+            "200": {
+              "content": {
+                "text/plain": {
+                  "schema": {
+                    "type": "string"
+                  }
+                }
+              },
+              "description": "Prometheus text exposition format."
+            },
+            "401": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Unauthorized"
+            },
+            "403": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Forbidden"
+            },
+            "429": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Too Many Requests"
+            },
+            "500": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Internal Server Error"
+            },
+            "503": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Service Unavailable"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "Export Prometheus metrics",
+          "tags": [
+            "operations"
+          ]
+        }
+      },
+      "/v1/answers": {
+        "post": {
+          "operationId": "answer_v1_answers_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfiguredAnswerPayload"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/AnswerResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "401": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Unauthorized"
+            },
+            "403": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Forbidden"
+            },
+            "404": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Not Found"
+            },
+            "409": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Conflict"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Unprocessable Entity"
+            },
+            "429": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Too Many Requests"
+            },
+            "500": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Internal Server Error"
+            },
+            "503": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Service Unavailable"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "Answer from a tenant-owned knowledge base",
+          "tags": [
+            "answers"
+          ]
+        }
+      },
+      "/v1/jobs/{job_id}": {
+        "delete": {
+          "operationId": "cancel_job_v1_jobs__job_id__delete",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "job_id",
+              "required": true,
+              "schema": {
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                "title": "Job Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/JobResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "401": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Unauthorized"
+            },
+            "403": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Forbidden"
+            },
+            "404": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Not Found"
+            },
+            "409": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Conflict"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Unprocessable Entity"
+            },
+            "429": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Too Many Requests"
+            },
+            "500": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Internal Server Error"
+            },
+            "503": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Service Unavailable"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "Request cooperative job cancellation",
+          "tags": [
+            "jobs"
+          ]
+        },
+        "get": {
+          "operationId": "get_job_v1_jobs__job_id__get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "job_id",
+              "required": true,
+              "schema": {
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                "title": "Job Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/JobResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "401": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Unauthorized"
+            },
+            "403": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Forbidden"
+            },
+            "404": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Not Found"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Unprocessable Entity"
+            },
+            "429": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Too Many Requests"
+            },
+            "500": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Internal Server Error"
+            },
+            "503": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Service Unavailable"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "Get background job state",
+          "tags": [
+            "jobs"
+          ]
+        }
+      },
+      "/v1/knowledge-bases": {
+        "get": {
+          "operationId": "list_knowledge_bases_v1_knowledge_bases_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 50,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            {
+              "in": "query",
+              "name": "offset",
+              "required": false,
+              "schema": {
+                "default": 0,
+                "maximum": 10000,
+                "minimum": 0,
+                "title": "Offset",
+                "type": "integer"
+              }
+            },
+            {
+              "in": "query",
+              "name": "cursor",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Cursor"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/KnowledgeBaseListResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "401": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Unauthorized"
+            },
+            "403": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Forbidden"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Unprocessable Entity"
+            },
+            "429": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Too Many Requests"
+            },
+            "500": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Internal Server Error"
+            },
+            "503": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Service Unavailable"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "List knowledge bases for the authenticated tenant",
+          "tags": [
+            "knowledge bases"
+          ]
+        },
+        "post": {
+          "operationId": "create_knowledge_base_v1_knowledge_bases_post",
+          "parameters": [
+            {
+              "in": "header",
+              "name": "Idempotency-Key",
+              "required": true,
+              "schema": {
+                "maxLength": 128,
+                "minLength": 8,
+                "pattern": "^[!-~]{8,128}$",
+                "title": "Idempotency-Key",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "multipart/form-data": {
+                "schema": {
+                  "$ref": "#/components/schemas/Body_create_knowledge_base_v1_knowledge_bases_post"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "202": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/KnowledgeBaseSubmissionResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "401": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Unauthorized"
+            },
+            "403": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Forbidden"
+            },
+            "409": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Conflict"
+            },
+            "413": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Request Entity Too Large"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Unprocessable Entity"
+            },
+            "429": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Too Many Requests"
+            },
+            "500": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Internal Server Error"
+            },
+            "503": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Service Unavailable"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "Create and asynchronously index a knowledge base",
+          "tags": [
+            "knowledge bases"
+          ]
+        }
+      },
+      "/v1/knowledge-bases/{knowledge_base_id}": {
+        "delete": {
+          "operationId": "delete_knowledge_base_v1_knowledge_bases__knowledge_base_id__delete",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "knowledge_base_id",
+              "required": true,
+              "schema": {
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                "title": "Knowledge Base Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/DeleteResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "401": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Unauthorized"
+            },
+            "403": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Forbidden"
+            },
+            "404": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Not Found"
+            },
+            "409": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Conflict"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Unprocessable Entity"
+            },
+            "429": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Too Many Requests"
+            },
+            "500": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Internal Server Error"
+            },
+            "503": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Service Unavailable"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "Delete a knowledge base and its stored data",
+          "tags": [
+            "knowledge bases"
+          ]
+        },
+        "get": {
+          "operationId": "get_knowledge_base_v1_knowledge_bases__knowledge_base_id__get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "knowledge_base_id",
+              "required": true,
+              "schema": {
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                "title": "Knowledge Base Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/KnowledgeBaseResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "401": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Unauthorized"
+            },
+            "403": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Forbidden"
+            },
+            "404": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Not Found"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Unprocessable Entity"
+            },
+            "429": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Too Many Requests"
+            },
+            "500": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Internal Server Error"
+            },
+            "503": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Service Unavailable"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "Get a tenant-owned knowledge base",
+          "tags": [
+            "knowledge bases"
+          ]
+        }
+      },
+      "/v1/knowledge-bases/{knowledge_base_id}/sessions/{session_id}": {
+        "delete": {
+          "operationId": "delete_session_v1_knowledge_bases__knowledge_base_id__sessions__session_id__delete",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "knowledge_base_id",
+              "required": true,
+              "schema": {
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                "title": "Knowledge Base Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "session_id",
+              "required": true,
+              "schema": {
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                "title": "Session Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/DeleteResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "401": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Unauthorized"
+            },
+            "403": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Forbidden"
+            },
+            "404": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Not Found"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Unprocessable Entity"
+            },
+            "429": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Too Many Requests"
+            },
+            "500": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Internal Server Error"
+            },
+            "503": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Service Unavailable"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "Delete one conversation session",
+          "tags": [
+            "sessions"
+          ]
+        }
+      }
+    }
+  },
+  "schema_version": 1
+}

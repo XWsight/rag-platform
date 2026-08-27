@@ -28,6 +28,7 @@ _INPUTS = (
     "requirements-py311.lock",
     "requirements-py312.lock",
     "requirements-dev.txt",
+    "contracts/openapi-v1.json",
 )
 
 

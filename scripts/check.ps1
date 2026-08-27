@@ -45,6 +45,7 @@ try {
     Invoke-CheckedPython -m ruff check .
     Invoke-CheckedPython -m mypy
     Invoke-CheckedPython scripts/verify_wheel.py
+    Invoke-CheckedPython scripts/verify_openapi_contract.py
     Invoke-CheckedPython scripts/benchmark_sparse.py `
         evals/retrieval_cases.jsonl `
         evals/corpus/rag.md `

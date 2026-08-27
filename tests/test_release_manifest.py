@@ -25,9 +25,12 @@ class ReleaseManifestTests(unittest.TestCase):
                 "requirements-py311.lock",
                 "requirements-py312.lock",
                 "requirements-dev.txt",
+                "contracts/openapi-v1.json",
             ):
                 content = b'[project]\nversion = "2.0.0"\n' if relative == "pyproject.toml" else relative.encode()
-                (root / relative).write_bytes(content)
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(content)
                 expected[relative] = hashlib.sha256(content).hexdigest()
             (root / ".env").write_text("SUPER_SECRET=must-not-be-read", encoding="utf-8")
 

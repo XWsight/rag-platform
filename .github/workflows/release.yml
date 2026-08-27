@@ -28,6 +28,7 @@ jobs:
         run: |
           python scripts/verify_dependency_lock.py
           python -m pip install --find-links https://download.pytorch.org/whl/cpu/torch/ --require-hashes -r requirements-py312.lock
+          python scripts/verify_openapi_contract.py
       - name: Generate SPDX dependency inventory
         run: >-
           python scripts/generate_runtime_sbom.py
