@@ -1,0 +1,3 @@
+# Default review owner for the platform's source, release, and governance files.
+# Add domain-team owners here when derivative layers become first-class paths.
+* @XWsight
