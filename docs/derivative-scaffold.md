@@ -19,7 +19,8 @@ python scripts\init_derivative.py `
 目标目录必须不存在；脚本拒绝覆盖已有路径。生成的 `legal_assistant/` 包含：
 
 - 默认委托内置 Provider 的 `provider_factory.py`；
-- 可直接运行的 `api_app.py` 和 `local_app.py` 组合根；
+- 可直接运行的 `asgi.py` 和 `workbench.py` 组合根；
+- 兼容旧派生项目的 `api_app.py` 和 `local_app.py` 转发入口；
 - 不访问外网的 Provider 工厂回归测试；
 - 产品展示配置覆盖示例；
 - 领域评测治理记录：生成时为 `draft`，不会伪造领域基线。
@@ -30,8 +31,8 @@ python scripts\init_derivative.py `
 若当前副本没有可用 Git 元数据，可用 `--base-revision <commit>` 显式记录经审查的基座提交；否则该记录会显示为 `unrecorded`，必须在首次提交派生层前补齐。
 
 将生成目录、基座 `.env.example` 和你的领域配置一起提交；真实 `.env`、客户数据、模型响应和
-密钥不能提交。通过 `uvicorn legal_assistant.api_app:app` 启动派生 API，或通过
-`python -m legal_assistant.local_app` 启动本地工作台。
+密钥不能提交。通过 `uvicorn legal_assistant.asgi:app` 启动派生 API，或通过
+`python -m legal_assistant.workbench` 启动本地工作台。
 
 ## 修改顺序
 

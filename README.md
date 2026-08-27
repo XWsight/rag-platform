@@ -13,7 +13,7 @@
 - GitHub 仓库与发布名称：[`rag-platform`](https://github.com/XWsight/rag-platform)。
 - Python 分发包：`rag-platform`；稳定的 Python 导入命名空间仍为 `rag_system`，避免下游项目因品牌调整而破坏。
 - 已安装的发行包提供 `rag-platform-api` 与 `rag-platform-workbench` 命令；从源码运行时使用等价的 `python -m rag_system.server` 与 `python -m rag_system.workbench`。
-- 为保护已有部署，持久卷 `rag-studio-data`、实例锁 `.rag-studio.instance` 和浏览器标签会话键保留兼容；它们是内部稳定标识，不是当前产品名称。
+- 新部署默认使用 `rag-platform-data` 卷。原地升级的旧部署必须继续显式设置其既有 `rag-studio-data` 卷；实例锁 `.rag-studio.instance` 和浏览器标签会话键也在迁移期内保留兼容，避免数据卷并发或会话丢失。
 
 准备首个真实领域试点时，请遵循[派生项目试点清单](docs/derivative-pilot.md)：项目提供评测和交付门禁，
 但不会用仓库内通用样例伪造领域质量结论。

@@ -1,12 +1,14 @@
-"""Packaged ASGI entry point for the durable RAG Platform API."""
+"""ASGI entry point for {{PRODUCT_NAME}}."""
 
 from __future__ import annotations
 
 from rag_system.api import create_app
 from rag_system.runtime_bootstrap import build_production_runtime
 
+from .provider_factory import {{FACTORY_CLASS}}
 
-runtime = build_production_runtime()
+
+runtime = build_production_runtime(provider_factory={{FACTORY_CLASS}}())
 app = create_app(
     platform=runtime.platform,
     authenticator=runtime.authenticator,

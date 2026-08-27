@@ -159,7 +159,7 @@ def build_spdx(
         "documentNamespace": f"https://spdx.org/spdxdocs/{_normalized_name(project_name)}-{digest}",
         "creationInfo": {
             "created": "1970-01-01T00:00:00Z",
-            "creators": ["Tool: rag-system-generate-runtime-sbom"],
+            "creators": ["Tool: rag-platform-generate-runtime-sbom"],
         },
         "documentDescribes": [package_id[name] for name in sorted(reachable)],
         "packages": packages,

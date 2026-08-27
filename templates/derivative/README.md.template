@@ -7,8 +7,9 @@ deployment files, then add domain-specific code here.
 ## Included extension points
 
 - `provider_factory.py`: replace the default provider deliberately, through a typed factory.
-- `api_app.py`: ASGI entry point using this derivative factory.
-- `local_app.py`: optional local Gradio entry point using this derivative factory.
+- `asgi.py`: ASGI entry point using this derivative factory.
+- `workbench.py`: optional local Gradio entry point using this derivative factory.
+- `api_app.py` and `local_app.py`: compatibility shims for older launch commands; new code should use the canonical entry points above.
 - `tests/`: a no-network factory regression test.
 - `evals/`: a machine-readable governance record for domain evaluation data.
 
@@ -18,7 +19,7 @@ deployment files, then add domain-specific code here.
 2. Create domain development, validation, and held-out test data before tuning retrieval or prompts.
 3. Replace the default implementation in `provider_factory.py` only after its provider-specific
    offline tests cover timeouts, authentication failures, schema failures, and error redaction.
-4. Launch `uvicorn {{PACKAGE_NAME}}.api_app:app` instead of the base `api_app:app` when using this layer.
+4. Launch `uvicorn {{PACKAGE_NAME}}.asgi:app` instead of the base `rag_system.asgi:app` when using this layer.
 5. Record an evaluation owner, classification and independent suite paths in
    `evals/governance.json`; it deliberately starts as `draft` and is not a fake baseline.
 6. Run `python scripts/validate_derivative_evaluation.py {{PACKAGE_NAME}}/evals/governance.json`

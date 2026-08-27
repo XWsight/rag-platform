@@ -89,4 +89,4 @@
 - API 错误与结构化日志不回显密钥、租户标识、问题正文、文档正文或供应商响应体。
 - 生产存储根使用单实例系统锁，阻止多个本地写进程同时操作 SQLite 与 Chroma。
 
-[Unreleased]: https://github.com/XWsight/rag-system/compare/7ea6c4249d80c86ded88dcae98e0d409d8ba35d1...main
+[Unreleased]: https://github.com/XWsight/rag-platform/compare/7ea6c4249d80c86ded88dcae98e0d409d8ba35d1...main

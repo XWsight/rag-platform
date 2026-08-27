@@ -64,27 +64,47 @@ class ProductionRuntime:
 
 
 class StorageRootLease:
-    """Hold an OS-level exclusive lease for one single-node storage root."""
+    """Hold current and legacy exclusive leases for one single-node storage root."""
 
-    def __init__(self, path: Path) -> None:
-        self._path = path
-        self._handle: BinaryIO | None = None
+    _CURRENT_FILENAME = ".rag-platform.instance"
+    _LEGACY_FILENAMES = (".rag-studio.instance",)
+
+    def __init__(self, paths: Sequence[Path]) -> None:
+        self._paths = tuple(paths)
+        self._handles: list[BinaryIO] = []
 
     @classmethod
     def acquire(cls, storage_root: Path) -> StorageRootLease:
-        lease = cls(storage_root / ".rag-studio.instance")
+        # Acquire the historical lock first so pre-rebrand processes cannot
+        # start between the two lock acquisitions. Keep it until the next
+        # breaking release, when old binaries are no longer supported.
+        lease = cls(
+            (
+                *(storage_root / filename for filename in cls._LEGACY_FILENAMES),
+                storage_root / cls._CURRENT_FILENAME,
+            )
+        )
         lease._acquire()
         return lease
 
     def _acquire(self) -> None:
-        if self._path.is_symlink():
+        try:
+            for path in self._paths:
+                self._handles.append(self._acquire_one(path))
+        except RuntimeError:
+            self._close_safely()
+            raise
+
+    @staticmethod
+    def _acquire_one(path: Path) -> BinaryIO:
+        if path.is_symlink():
             raise RuntimeError("storage instance lease path is unsafe")
         flags = os.O_RDWR | os.O_CREAT
         flags |= getattr(os, "O_BINARY", 0)
         flags |= getattr(os, "O_NOFOLLOW", 0)
         descriptor: int | None = None
         try:
-            descriptor = os.open(self._path, flags, 0o600)
+            descriptor = os.open(path, flags, 0o600)
             handle = os.fdopen(descriptor, "r+b", buffering=0)
             descriptor = None
         except (OSError, ValueError):
@@ -93,7 +113,7 @@ class StorageRootLease:
             raise RuntimeError("storage instance lease path is unsafe") from None
         try:
             handle_stat = os.fstat(handle.fileno())
-            path_stat = os.lstat(self._path)
+            path_stat = os.lstat(path)
             if (
                 not stat.S_ISREG(handle_stat.st_mode)
                 or stat.S_ISLNK(path_stat.st_mode)
@@ -128,13 +148,31 @@ class StorageRootLease:
         except OSError:
             handle.close()
             raise RuntimeError("storage root is already in use by another process") from None
-        self._handle = handle
+        return handle
 
     def close(self) -> None:
-        handle = self._handle
-        if handle is None:
+        handles = tuple(reversed(self._handles))
+        self._handles.clear()
+        if not handles:
             return
-        self._handle = None
+        failure: OSError | None = None
+        for handle in handles:
+            try:
+                self._release(handle)
+            except OSError as error:
+                if failure is None:
+                    failure = error
+        if failure is not None:
+            raise failure
+
+    def _close_safely(self) -> None:
+        try:
+            self.close()
+        except OSError:
+            pass
+
+    @staticmethod
+    def _release(handle: BinaryIO) -> None:
         try:
             handle.seek(0)
             if os.name == "nt":

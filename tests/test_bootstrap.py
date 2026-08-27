@@ -202,6 +202,8 @@ class BootstrapTests(unittest.TestCase):
             root = Path(directory)
             first = StorageRootLease.acquire(root)
             try:
+                self.assertTrue((root / ".rag-platform.instance").is_file())
+                self.assertTrue((root / ".rag-studio.instance").is_file())
                 with self.assertRaisesRegex(RuntimeError, "already in use"):
                     StorageRootLease.acquire(root)
             finally:
@@ -217,6 +219,19 @@ class BootstrapTests(unittest.TestCase):
 
             with self.assertRaisesRegex(RuntimeError, "lease path is unsafe"):
                 StorageRootLease.acquire(root)
+
+    def test_storage_root_lease_releases_the_legacy_lock_when_the_current_path_is_unsafe(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            current_path = root / ".rag-platform.instance"
+            current_path.mkdir()
+
+            with self.assertRaisesRegex(RuntimeError, "lease path is unsafe"):
+                StorageRootLease.acquire(root)
+
+            current_path.rmdir()
+            recovered = StorageRootLease.acquire(root)
+            recovered.close()
 
     def test_service_bootstrap_accepts_an_explicit_provider_factory(self) -> None:
         factory = _TestProviderFactory()

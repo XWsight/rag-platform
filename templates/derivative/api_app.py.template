@@ -1,23 +1,6 @@
-"""ASGI entry point for {{PRODUCT_NAME}}."""
+"""Compatibility ASGI entry point; use :mod:`{{PACKAGE_NAME}}.asgi` instead."""
 
-from __future__ import annotations
-
-import logging
-
-from rag_system.api import create_app
-from rag_system.runtime_bootstrap import build_production_runtime
-
-from .provider_factory import {{FACTORY_CLASS}}
+from .asgi import app
 
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
-
-runtime = build_production_runtime(provider_factory={{FACTORY_CLASS}}())
-app = create_app(
-    platform=runtime.platform,
-    authenticator=runtime.authenticator,
-    rate_limiter=runtime.rate_limiter,
-    logger=runtime.event_logger,
-    readiness=runtime.ready,
-    shutdown=runtime.close,
-)
+__all__ = ["app"]

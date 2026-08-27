@@ -40,8 +40,10 @@ class InitDerivativeTests(unittest.TestCase):
             provider_factory = (created / "provider_factory.py").read_text(encoding="utf-8")
             self.assertIn("class LegalAssistantProviderFactory", provider_factory)
             self.assertNotIn("{{", provider_factory)
-            api_entrypoint = (created / "api_app.py").read_text(encoding="utf-8")
+            api_entrypoint = (created / "asgi.py").read_text(encoding="utf-8")
             self.assertIn("LegalAssistantProviderFactory", api_entrypoint)
+            self.assertIn("from .asgi import app", (created / "api_app.py").read_text())
+            self.assertIn("from .workbench import main", (created / "local_app.py").read_text())
             self.assertIn("RAG_PRODUCT_NAME=Legal Assistant", (created / ".env.example").read_text())
             self.assertIn("Upstream baseline", (created / "UPSTREAM.md").read_text())
             self.assertNotIn("{{", (created / "UPSTREAM.md").read_text())
@@ -189,7 +191,7 @@ class InitDerivativeTests(unittest.TestCase):
             try:
                 with patch.dict(os.environ, environment, clear=True):
                     with patch("logging.basicConfig"):
-                        module = importlib.import_module(f"{package_name}.api_app")
+                        module = importlib.import_module(f"{package_name}.asgi")
                     with TestClient(module.app, raise_server_exceptions=False) as client:
                         self.assertEqual(client.get("/health/ready").status_code, 200)
                         response = client.get(

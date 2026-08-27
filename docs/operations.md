@@ -1,6 +1,6 @@
 # 单节点运维手册
 
-本手册针对 `compose.yaml` 的单 API 容器与 `rag-studio-data` 持久卷。该卷名是 RAG Studio 时期保留下来的稳定数据标识；RAG Platform 不会自动切换它，以免升级后出现空数据卷。所有变更先在非生产环境演练。涉及删除或覆盖数据的命令必须先核对环境、Compose 项目、卷名和备份校验值。
+本手册针对 `compose.yaml` 的单 API 容器与 `rag-platform-data` 持久卷。新部署从 `.env.example` 获得该当前默认值；RAG Studio 时期的原地升级必须显式保留既有 `rag-studio-data`，不能因为品牌更名而切换到空卷。所有变更先在非生产环境演练。涉及删除或覆盖数据的命令必须先核对环境、Compose 项目、卷名和备份校验值。
 
 ## 日常检查
 
@@ -41,7 +41,7 @@ SQLite 数据库、本地向量索引和原始文档共同构成一个恢复单�
    mkdir -p backups
    stamp=$(date -u +%Y%m%dT%H%M%SZ)
    docker run --rm \
-     -v rag-studio-data:/data:ro \
+     -v rag-platform-data:/data:ro \
      -v "$PWD/backups:/backup" \
      busybox:1.37.0 \
      tar -C /data -czf "/backup/rag-platform-${stamp}.tar.gz" .
@@ -72,19 +72,19 @@ SQLite 元数据和服务启动恢复路径；由于确定性 CI 不下载 Embed
 ```bash
 sha256sum --check backups/rag-platform-<时间>.tar.gz.sha256
 docker compose down
-docker volume create rag-studio-data-restore
+docker volume create rag-platform-data-restore
 docker run --rm \
-  -v rag-studio-data-restore:/restore \
+  -v rag-platform-data-restore:/restore \
   -v "$PWD/backups:/backup:ro" \
   busybox:1.37.0 \
   tar -C /restore -xzf /backup/rag-platform-<时间>.tar.gz
-RAG_DATA_VOLUME=rag-studio-data-restore docker compose up -d
+RAG_DATA_VOLUME=rag-platform-data-restore docker compose up -d
 curl --fail http://127.0.0.1:8000/health/ready
 ```
 
 恢复后用只读请求核对租户边界、知识库数量和抽样检索，再允许写入。启动先把 `jobs.sqlite3` 中未终态的旧执行快照标为 `FAILED`/`worker_restarted`；随后核验 `PREPARING` 的不可变清单与文件集，完整则继续、部分则回滚，再对已知租户重新提交 `PENDING`/`INDEXING`，并把 Catalog 中的 `CANCELLING` 收敛为 `FAILED`/`index_cancelled`。旧 job ID 在归档保留期内仍可查询，但旧 worker 不会恢复执行。确认恢复有效之前，保留原卷不动。归档只能来自可信来源；不要解压未经验证的外部归档。
 
-PowerShell 中可用 `Get-FileHash -Algorithm SHA256 <文件>` 校验，并用 `$env:RAG_DATA_VOLUME='rag-studio-data-restore'` 设置本次 Compose 进程的卷名。
+PowerShell 中可用 `Get-FileHash -Algorithm SHA256 <文件>` 校验，并用 `$env:RAG_DATA_VOLUME='rag-platform-data-restore'` 设置本次 Compose 进程的卷名。原地恢复历史卷时，以上命令中的当前卷名必须替换为已经核对的旧卷名。
 
 ### 最小故障演练周期
 
@@ -184,8 +184,8 @@ docker compose logs --tail=300 api
 
 ```bash
 docker compose down
-docker volume inspect rag-studio-data
-# 人工核对 inspect 结果后，才可执行：docker volume rm rag-studio-data
+docker volume inspect rag-platform-data
+# 人工核对 inspect 结果后，才可执行：docker volume rm rag-platform-data
 ```
 
 不要使用 `docker compose down -v` 作为日常清理命令，它会绕过逐卷核对。删除生产卷后，还必须按保留策略处理离机备份、日志、导出文件和密钥。

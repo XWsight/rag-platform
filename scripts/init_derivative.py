@@ -100,7 +100,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (FileExistsError, RuntimeError, ValueError) as error:
         parser.error(str(error))
     print(f"Created derivative layer: {destination}")
-    print(f"Start its API with: uvicorn {args.package_name}.api_app:app")
+    print(f"Start its API with: uvicorn {args.package_name}.asgi:app")
     return 0
 
 

@@ -241,28 +241,28 @@ jobs:
           cat > .env <<'EOF'
           RAG_PERSIST_DATA=true
           RAG_STORAGE_ROOT=/data
-          RAG_PRODUCT_NAME=RAG Studio CI
+          RAG_PRODUCT_NAME=RAG Platform CI
           RAG_PRODUCT_TAGLINE=Container smoke test
           RAG_API_KEYS_JSON={"ci-smoke-key-0123456789abcdef":{"subject":"ci","tenant_id":"ci","roles":["reader","writer","operator"]}}
           RAG_IMAGE_TAG=ci-${{ github.run_id }}-${{ github.run_attempt }}
           RAG_SOURCE_REVISION=${{ github.sha }}
-          RAG_DATA_VOLUME=rag-studio-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          RAG_DATA_VOLUME=rag-platform-ci-${{ github.run_id }}-${{ github.run_attempt }}
           RAG_BIND_ADDRESS=127.0.0.1
           RAG_PUBLISHED_PORT=8000
           EOF
-          docker compose -p rag-studio-ci config --quiet
+          docker compose -p rag-platform-ci config --quiet
       - name: Build hardened image
-        run: docker compose -p rag-studio-ci build api
+        run: docker compose -p rag-platform-ci build api
       - name: Verify image source revision label
         shell: bash
         run: |
-          image="rag-studio:ci-${{ github.run_id }}-${{ github.run_attempt }}"
+          image="rag-platform:ci-${{ github.run_id }}-${{ github.run_attempt }}"
           revision="$(docker image inspect "$image" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
           test "$revision" = "${{ github.sha }}"
       - name: Start service and verify health plus authentication
         shell: bash
         run: |
-          docker compose -p rag-studio-ci up -d
+          docker compose -p rag-platform-ci up -d
           for attempt in $(seq 1 45); do
             if curl --fail --silent --show-error http://127.0.0.1:8000/health/ready; then
               break
@@ -278,12 +278,12 @@ jobs:
       - name: Exercise backup and restore on a new volume
         shell: bash
         run: |
-          source_volume=rag-studio-ci-${{ github.run_id }}-${{ github.run_attempt }}
-          restore_volume=rag-studio-restore-${{ github.run_id }}-${{ github.run_attempt }}
-          backup_directory="${RUNNER_TEMP}/rag-studio-backup-${{ github.run_id }}-${{ github.run_attempt }}"
+          source_volume=rag-platform-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          restore_volume=rag-platform-restore-${{ github.run_id }}-${{ github.run_attempt }}
+          backup_directory="${RUNNER_TEMP}/rag-platform-backup-${{ github.run_id }}-${{ github.run_attempt }}"
           backup_archive="${backup_directory}/data.tar.gz"
           mkdir -p "$backup_directory"
-          docker compose -p rag-studio-ci stop api
+          docker compose -p rag-platform-ci stop api
           docker run --rm \
             -v "${source_volume}:/data:ro" \
             -v "${backup_directory}:/backup" \
@@ -294,7 +294,7 @@ jobs:
             -v "${backup_directory}:/backup:ro" \
             busybox:1.37.0 tar -C /restore -xzf /backup/data.tar.gz
           RAG_DATA_VOLUME="$restore_volume" RAG_PUBLISHED_PORT=8012 \
-            docker compose -p rag-studio-restore up -d
+            docker compose -p rag-platform-restore up -d
           for attempt in $(seq 1 45); do
             if curl --fail --silent --show-error http://127.0.0.1:8012/health/ready; then
               break
@@ -311,17 +311,17 @@ jobs:
         if: failure()
         shell: bash
         run: |
-          docker compose -p rag-studio-ci ps || true
-          docker compose -p rag-studio-ci logs --tail=300 api || true
-          RAG_DATA_VOLUME=rag-studio-restore-${{ github.run_id }}-${{ github.run_attempt }} \
-            RAG_PUBLISHED_PORT=8012 docker compose -p rag-studio-restore ps || true
-          RAG_DATA_VOLUME=rag-studio-restore-${{ github.run_id }}-${{ github.run_attempt }} \
-            RAG_PUBLISHED_PORT=8012 docker compose -p rag-studio-restore logs --tail=300 api || true
+          docker compose -p rag-platform-ci ps || true
+          docker compose -p rag-platform-ci logs --tail=300 api || true
+          RAG_DATA_VOLUME=rag-platform-restore-${{ github.run_id }}-${{ github.run_attempt }} \
+            RAG_PUBLISHED_PORT=8012 docker compose -p rag-platform-restore ps || true
+          RAG_DATA_VOLUME=rag-platform-restore-${{ github.run_id }}-${{ github.run_attempt }} \
+            RAG_PUBLISHED_PORT=8012 docker compose -p rag-platform-restore logs --tail=300 api || true
       - name: Remove CI containers and volumes
         if: always()
         shell: bash
         run: |
-          RAG_DATA_VOLUME=rag-studio-restore-${{ github.run_id }}-${{ github.run_attempt }} \
-            RAG_PUBLISHED_PORT=8012 docker compose -p rag-studio-restore down --volumes --remove-orphans
-          docker volume rm rag-studio-restore-${{ github.run_id }}-${{ github.run_attempt }} || true
-          docker compose -p rag-studio-ci down --volumes --remove-orphans
+          RAG_DATA_VOLUME=rag-platform-restore-${{ github.run_id }}-${{ github.run_attempt }} \
+            RAG_PUBLISHED_PORT=8012 docker compose -p rag-platform-restore down --volumes --remove-orphans
+          docker volume rm rag-platform-restore-${{ github.run_id }}-${{ github.run_attempt }} || true
+          docker compose -p rag-platform-ci down --volumes --remove-orphans
