@@ -18,7 +18,7 @@ FRAMEWORK_NEUTRAL_MODULES = (
     "rag_system/json_contract.py",
     "rag_system/submission.py",
     "rag_system/coordination.py",
-    "rag_system/assets.py",
+    "rag_system/knowledge_base_assets.py",
     "rag_system/indexing.py",
     "rag_system/health.py",
     "rag_system/job_contracts.py",
@@ -49,7 +49,7 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         violations = [
             f"{relative}: {imported}"
             for relative in (
-                "rag_system/service.py",
+                "rag_system/rag_service.py",
                 "rag_system/api.py",
                 "rag_system/api_answer_routes.py",
                 "rag_system/api_resource_routes.py",
@@ -66,10 +66,10 @@ class ArchitectureBoundaryTests(unittest.TestCase):
             "rag_system.idempotency",
             "rag_system.jobs",
             "rag_system.loaders",
-            "rag_system.platform",
+            "rag_system.rag_platform",
             "rag_system.providers",
             "rag_system.retrieval",
-            "rag_system.service",
+            "rag_system.rag_service",
         }
         for relative in (
             "rag_system/api.py",
@@ -82,7 +82,7 @@ class ArchitectureBoundaryTests(unittest.TestCase):
                 self.assertIn("rag_system.application", imports)
 
     def test_platform_depends_on_runtime_ports_not_concrete_adapters(self) -> None:
-        self._assert_runtime_port_boundary("rag_system/platform.py")
+        self._assert_runtime_port_boundary("rag_system/rag_platform.py")
 
     def test_workflows_depend_on_runtime_ports_not_concrete_adapters(self) -> None:
         for relative in (
@@ -97,10 +97,10 @@ class ArchitectureBoundaryTests(unittest.TestCase):
             "rag_system/application.py",
             "rag_system/application_ports.py",
             "rag_system/answer_workflow.py",
-            "rag_system/assets.py",
+            "rag_system/knowledge_base_assets.py",
             "rag_system/indexing.py",
             "rag_system/knowledge_base_lifecycle.py",
-            "rag_system/platform.py",
+            "rag_system/rag_platform.py",
         )
         violations = [
             relative
@@ -130,7 +130,7 @@ class ArchitectureBoundaryTests(unittest.TestCase):
             "rag_system/coordination.py",
             "rag_system/indexing.py",
             "rag_system/knowledge_base_lifecycle.py",
-            "rag_system/platform.py",
+            "rag_system/rag_platform.py",
         )
         violations = [
             relative

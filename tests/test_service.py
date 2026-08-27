@@ -14,7 +14,7 @@ from rag_system.domain import (
     WebSearchResult,
 )
 from rag_system.provider_errors import ProviderUnavailableError
-from rag_system.service import RagService
+from rag_system.rag_service import RagService
 
 
 class FakeRetriever:

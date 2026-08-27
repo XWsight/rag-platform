@@ -13,7 +13,7 @@ from rag_system.application import (
     PlatformValidationError,
 )
 from rag_system.application_ports import KnowledgeBaseRepository, KnowledgeService
-from rag_system.assets import KnowledgeBaseAssets
+from rag_system.knowledge_base_assets import KnowledgeBaseAssets
 from rag_system.config import Settings
 from rag_system.coordination import ResourceLockPool
 from rag_system.domain import AnswerRequest, AnswerResult

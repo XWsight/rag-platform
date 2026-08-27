@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import os
 
-from rag_system.bootstrap import build_service
-from rag_system.ui import create_demo
+from rag_system.runtime_bootstrap import build_service
+from rag_system.gradio_workbench import create_demo
 
 from .provider_factory import {{FACTORY_CLASS}}
 

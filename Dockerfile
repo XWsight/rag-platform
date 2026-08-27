@@ -55,7 +55,6 @@ RUN python -m pip install --no-cache-dir --no-index --find-links=/wheels \
     rm -rf /wheels
 
 COPY --chown=app:app rag_system ./rag_system
-COPY --chown=app:app api_app.py ./api_app.py
 
 # An empty named volume mounted at /data inherits this ownership on first use.
 RUN mkdir -p /data/cache/huggingface && chown -R app:app /app /data
@@ -69,5 +68,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
 
 STOPSIGNAL SIGTERM
 
-ENTRYPOINT ["uvicorn", "api_app:app"]
-CMD ["--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--timeout-graceful-shutdown", "30", "--no-access-log"]
+ENTRYPOINT ["python", "-m", "rag_system.server"]
+CMD ["--host", "0.0.0.0", "--port", "8000"]

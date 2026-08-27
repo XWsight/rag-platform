@@ -12,6 +12,7 @@
 
 - GitHub 仓库与发布名称：[`rag-platform`](https://github.com/XWsight/rag-platform)。
 - Python 分发包：`rag-platform`；稳定的 Python 导入命名空间仍为 `rag_system`，避免下游项目因品牌调整而破坏。
+- 已安装的发行包提供 `rag-platform-api` 与 `rag-platform-workbench` 命令；从源码运行时使用等价的 `python -m rag_system.server` 与 `python -m rag_system.workbench`。
 - 为保护已有部署，持久卷 `rag-studio-data`、实例锁 `.rag-studio.instance` 和浏览器标签会话键保留兼容；它们是内部稳定标识，不是当前产品名称。
 
 准备首个真实领域试点时，请遵循[派生项目试点清单](docs/derivative-pilot.md)：项目提供评测和交付门禁，
@@ -105,6 +106,8 @@ py -3.11 -m venv .venv
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+# 安装当前源码包，启用 `rag-platform-*` 命令，同时不重新解析已锁定的依赖。
+python -m pip install -e . --no-deps
 Copy-Item .env.example .env
 ```
 
@@ -135,7 +138,7 @@ ZHIPU_MODEL=glm-5.2
 ```powershell
 $env:NO_PROXY = "127.0.0.1,localhost"
 $env:no_proxy = "127.0.0.1,localhost"
-python app.py
+python -m rag_system.workbench
 ```
 
 访问 `http://127.0.0.1:7860`。首次使用默认 Embedding 模型时需要下载模型文件。正式部署统一使用下方 FastAPI 的 `/app` Web 工作台；新功能应优先进入该界面，避免双 UI 行为分叉。
@@ -153,7 +156,7 @@ RAG_API_KEYS_JSON={"替换为至少16字符的随机密钥":{"subject":"local-ad
 启动单 worker 服务：
 
 ```powershell
-python -m uvicorn api_app:app --host 127.0.0.1 --port 8000 --workers 1
+python -m rag_system.server --host 127.0.0.1 --port 8000
 ```
 
 主要端点：

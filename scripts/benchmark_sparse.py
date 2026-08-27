@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 
@@ -14,7 +15,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from rag_system.benchmark import load_retrieval_benchmark, run_retrieval_benchmark  # noqa: E402
 from rag_system.benchmark_suite import load_retrieval_suite  # noqa: E402
 from rag_system.config import Settings, load_settings  # noqa: E402
-from rag_system.domain import SearchHit  # noqa: E402
+from rag_system.domain import Chunk, SearchHit  # noqa: E402
 from rag_system.evaluation import DatasetValidationError  # noqa: E402
 from rag_system.ingestion import DocumentIngestor  # noqa: E402
 from rag_system.quality_gate import evaluate_quality_gate, load_quality_gate  # noqa: E402
@@ -27,13 +28,13 @@ from rag_system.text import lexical_relevance  # noqa: E402
 class SparseBaselineRetriever:
     """Adapt BM25 chunks to the common retriever contract for baselining."""
 
-    def __init__(self, chunks) -> None:
+    def __init__(self, chunks: Sequence[Chunk]) -> None:
         self._chunks = {chunk.chunk_id: chunk for chunk in chunks}
         self._index = BM25Index(
             SparseDocument(chunk.chunk_id, chunk.text) for chunk in chunks
         )
 
-    def search(self, query: str, *, top_k: int):
+    def search(self, query: str, *, top_k: int) -> tuple[SearchHit, ...]:
         sparse_hits = self._index.search(query, top_k=top_k)
         return tuple(
             SearchHit(

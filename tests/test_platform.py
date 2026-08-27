@@ -31,7 +31,7 @@ from rag_system.idempotency import IdempotencyConflictError
 from rag_system.jobs import JobManager, JobNotFoundError, JobStatus
 from rag_system.job_contracts import JobId, JobSnapshot
 from rag_system.job_store import SqliteJobSnapshotStore
-from rag_system.platform import (
+from rag_system.rag_platform import (
     IdempotencyInProgressError,
     KnowledgeBaseNotReadyError,
     PlatformIntegrityError,

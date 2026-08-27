@@ -1,7 +1,7 @@
 import unittest
 
 from rag_system.domain import AnswerResult, Citation, Route, RouteDecision
-from rag_system.ui import _file_paths, _sources_markdown
+from rag_system.gradio_workbench import _file_paths, _sources_markdown
 
 
 class InterfaceFormattingTests(unittest.TestCase):

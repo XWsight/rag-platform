@@ -20,7 +20,7 @@ from rag_system.application_ports import (
     KnowledgeBaseRepository,
     KnowledgeService,
 )
-from rag_system.assets import AssetStoreFailure, KnowledgeBaseAssets
+from rag_system.knowledge_base_assets import AssetStoreFailure, KnowledgeBaseAssets
 from rag_system.knowledge_base_contracts import (
     KnowledgeBaseErrorCode,
     KnowledgeBaseRecord,

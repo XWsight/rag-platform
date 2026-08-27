@@ -7,11 +7,11 @@ from dataclasses import replace
 from pathlib import Path
 
 from rag_system.application import UploadDocument
-from rag_system.bootstrap import LocalDurableRuntimeProfile, build_service_from_settings
+from rag_system.runtime_bootstrap import LocalDurableRuntimeProfile, build_service_from_settings
 from rag_system.config import Settings
 from rag_system.domain import AnswerRequest, IndexRef, SearchHit
 from rag_system.job_contracts import JobStatus
-from rag_system.platform import RagPlatform
+from rag_system.rag_platform import RagPlatform
 from rag_system.runtime_profile import RuntimeComponents
 from rag_system.tenancy import Principal, TenantId
 

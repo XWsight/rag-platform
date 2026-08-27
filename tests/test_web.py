@@ -1,7 +1,7 @@
 import unittest
 
 from rag_system.domain import WebSearchResult
-from rag_system.web import canonicalize_url, rank_web_results
+from rag_system.web_results import canonicalize_url, rank_web_results
 
 
 def result(identifier: str, title: str, content: str, url: str) -> WebSearchResult:

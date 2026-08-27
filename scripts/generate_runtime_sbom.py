@@ -60,7 +60,10 @@ def load_pins(requirements_path: Path) -> dict[str, str]:
 def installed_distributions() -> dict[str, Distribution]:
     result: dict[str, Distribution] = {}
     for item in metadata.distributions():
-        name = item.metadata.get("Name")
+        try:
+            name = item.metadata["Name"]
+        except KeyError:
+            continue
         if not isinstance(name, str) or not name.strip():
             continue
         normalized = _normalized_name(name)

@@ -6,7 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
-from rag_system.bootstrap import (
+from rag_system.runtime_bootstrap import (
     LocalDurableRuntimeProfile,
     StorageRootLease,
     build_production_runtime,
@@ -233,9 +233,9 @@ class BootstrapTests(unittest.TestCase):
             settings = replace(Settings(), storage_root=Path(directory))
             service = _RuntimeService()
             with (
-                patch("rag_system.bootstrap.build_service_from_settings", return_value=service),
+                patch("rag_system.runtime_bootstrap.build_service_from_settings", return_value=service),
                 patch(
-                    "rag_system.bootstrap.SqliteJobSnapshotStore.recover_interrupted",
+                    "rag_system.runtime_bootstrap.SqliteJobSnapshotStore.recover_interrupted",
                     side_effect=RuntimeError("durable job recovery failure"),
                 ),
             ):
@@ -267,7 +267,7 @@ class BootstrapTests(unittest.TestCase):
                     idempotency=_RuntimeIdempotency(),
                 )
             )
-            with patch("rag_system.bootstrap.load_settings", return_value=settings):
+            with patch("rag_system.runtime_bootstrap.load_settings", return_value=settings):
                 runtime = build_production_runtime(runtime_profile=profile)
             try:
                 self.assertEqual(profile.calls, 1)
@@ -304,7 +304,7 @@ class BootstrapTests(unittest.TestCase):
                     idempotency=_RuntimeIdempotency(),
                 )
             )
-            with patch("rag_system.bootstrap.load_settings", return_value=settings):
+            with patch("rag_system.runtime_bootstrap.load_settings", return_value=settings):
                 with self.assertRaisesRegex(RuntimeError, "catalog startup failure"):
                     build_production_runtime(runtime_profile=profile)
 
@@ -336,7 +336,7 @@ class BootstrapTests(unittest.TestCase):
                     idempotency=_RuntimeIdempotency(),
                 )
             )
-            with patch("rag_system.bootstrap.load_settings", return_value=settings):
+            with patch("rag_system.runtime_bootstrap.load_settings", return_value=settings):
                 runtime = build_production_runtime(runtime_profile=profile)
 
             with self.assertRaisesRegex(RuntimeError, "job shutdown failure"):
