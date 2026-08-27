@@ -1,18 +1,20 @@
 "use strict";
 
-const KEY_STORAGE = "rag-studio-api-key";
-const ACTIVE_STORAGE = "rag-studio-active-base";
+const KEY_STORAGE = "rag-platform-api-key";
+const ACTIVE_STORAGE = "rag-platform-active-base";
+const LEGACY_KEY_STORAGE = "rag-studio-api-key";
+const LEGACY_ACTIVE_STORAGE = "rag-studio-active-base";
 const KNOWLEDGE_BASE_PAGE_SIZE = 100;
 
 const state = {
-  apiKey: readSession(KEY_STORAGE),
+  apiKey: readSession(KEY_STORAGE, LEGACY_KEY_STORAGE),
   knowledgeBases: [],
-  activeId: readSession(ACTIVE_STORAGE),
+  activeId: readSession(ACTIVE_STORAGE, LEGACY_ACTIVE_STORAGE),
   sessionId: `session_${randomId()}`,
   busy: false,
   search: "",
   pendingConsent: null,
-  productName: document.querySelector("#product-name")?.textContent || "RAG Studio",
+  productName: document.querySelector("#product-name")?.textContent || "RAG Platform",
 };
 
 const ui = {
@@ -75,9 +77,9 @@ const ui = {
   productTagline: document.querySelector("#product-tagline"),
 };
 
-function readSession(key) {
+function readSession(key, legacyKey = "") {
   try {
-    return window.sessionStorage.getItem(key) || "";
+    return window.sessionStorage.getItem(key) || window.sessionStorage.getItem(legacyKey) || "";
   } catch {
     return "";
   }

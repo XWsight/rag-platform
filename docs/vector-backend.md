@@ -1,6 +1,6 @@
 # 向量后端扩展契约
 
-`RAG Studio` 的默认后端是本地精确余弦扫描，适合本项目定义的 durable
+`RAG Platform` 的默认后端是本地精确余弦扫描，适合本项目定义的 durable
 single-node 部署。它不是隐藏的全局选择：组合根
 [`build_service_from_settings`](../rag_system/bootstrap.py) 接受明确注入的
 `IndexRepository`，派生项目可在自己的组合根提供 Milvus、Qdrant、pgvector

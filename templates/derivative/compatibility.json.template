@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "base_project": "rag-studio",
+  "base_project": "rag-platform",
   "base_revision": "{{BASE_REVISION}}",
   "base_api_major": 2
 }

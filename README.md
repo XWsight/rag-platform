@@ -1,12 +1,18 @@
-# RAG Studio
+# RAG Platform
 
-[![quality](https://github.com/XWsight/rag-system/actions/workflows/quality.yml/badge.svg?branch=main)](https://github.com/XWsight/rag-system/actions/workflows/quality.yml?query=branch%3Amain)
+[![quality](https://github.com/XWsight/rag-platform/actions/workflows/quality.yml/badge.svg?branch=main)](https://github.com/XWsight/rag-platform/actions/workflows/quality.yml?query=branch%3Amain)
 
 面向中文知识库的隐私优先 RAG 系统：支持安全的多格式文档导入、向量与 BM25 混合检索、RRF 融合、可选重排序、证据路由、联网补充、带引用回答和有预算上限的研究模式。
 
 仓库提供三个入口：面向普通用户的同源 Web 工作台、适合本地实验的 Gradio 工作台，以及具备租户隔离、鉴权、后台索引任务、持久化目录、限流、指标和安全错误协议的 FastAPI 服务。当前完整增强版位于 `main` 分支。
 
 它同时是一个可派生的通用基座：产品名称、展示语和运行配置可在不修改 API 契约的前提下调整；行业特有的模型、数据、规则和 UI 应通过明确端口与独立评测集扩展。完整流程见[派生项目定制指南](docs/customization.md)。
+
+## 项目标识与兼容性
+
+- GitHub 仓库与发布名称：[`rag-platform`](https://github.com/XWsight/rag-platform)。
+- Python 分发包：`rag-platform`；稳定的 Python 导入命名空间仍为 `rag_system`，避免下游项目因品牌调整而破坏。
+- 为保护已有部署，持久卷 `rag-studio-data`、实例锁 `.rag-studio.instance` 和浏览器标签会话键保留兼容；它们是内部稳定标识，不是当前产品名称。
 
 准备首个真实领域试点时，请遵循[派生项目试点清单](docs/derivative-pilot.md)：项目提供评测和交付门禁，
 但不会用仓库内通用样例伪造领域质量结论。
@@ -91,8 +97,8 @@ JSON 报告会同时记录基准参数、Python/平台、可见 CPU 数、源码
 要求 Python 3.11 或 3.12。Windows PowerShell：
 
 ```powershell
-git clone https://github.com/XWsight/rag-system.git
-cd rag-system
+git clone https://github.com/XWsight/rag-platform.git
+cd rag-platform
 git switch main
 
 py -3.11 -m venv .venv
@@ -113,6 +119,7 @@ npm run test:browser
 
 它覆盖访问密钥连接、文档上传和索引完成、问答与引用、资料详情、会话清空、删除，以及云端授权默认关闭与显式确认。`scripts/check.ps1` 也会运行该套件。
 Node 工具链固定为 Node 24 与 npm 11；`npm ci` 会拒绝不匹配的锁文件。
+依赖漏洞审计默认最多运行 120 秒；网络受限或 CI 环境可用 `python scripts\audit_dependencies.py --timeout-seconds 180` 在 30–300 秒内调整，超时仍会失败关闭并回收子进程。
 
 如果需要云端生成或联网搜索，再在 `.env` 中配置：
 

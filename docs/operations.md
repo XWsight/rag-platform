@@ -1,6 +1,6 @@
 # 单节点运维手册
 
-本手册针对 `compose.yaml` 的单 API 容器与 `rag-studio-data` 持久卷。所有变更先在非生产环境演练。涉及删除或覆盖数据的命令必须先核对环境、Compose 项目、卷名和备份校验值。
+本手册针对 `compose.yaml` 的单 API 容器与 `rag-studio-data` 持久卷。该卷名是 RAG Studio 时期保留下来的稳定数据标识；RAG Platform 不会自动切换它，以免升级后出现空数据卷。所有变更先在非生产环境演练。涉及删除或覆盖数据的命令必须先核对环境、Compose 项目、卷名和备份校验值。
 
 ## 日常检查
 
@@ -44,9 +44,9 @@ SQLite 数据库、本地向量索引和原始文档共同构成一个恢复单�
      -v rag-studio-data:/data:ro \
      -v "$PWD/backups:/backup" \
      busybox:1.37.0 \
-     tar -C /data -czf "/backup/rag-studio-${stamp}.tar.gz" .
-   sha256sum "backups/rag-studio-${stamp}.tar.gz" \
-     > "backups/rag-studio-${stamp}.tar.gz.sha256"
+     tar -C /data -czf "/backup/rag-platform-${stamp}.tar.gz" .
+   sha256sum "backups/rag-platform-${stamp}.tar.gz" \
+     > "backups/rag-platform-${stamp}.tar.gz.sha256"
    ```
 
 4. 立即恢复服务并验证 readiness：
@@ -70,14 +70,14 @@ SQLite 元数据和服务启动恢复路径；由于确定性 CI 不下载 Embed
 始终恢复到一个**新卷**，验证后再切换；不要先清空当前卷。
 
 ```bash
-sha256sum --check backups/rag-studio-<时间>.tar.gz.sha256
+sha256sum --check backups/rag-platform-<时间>.tar.gz.sha256
 docker compose down
 docker volume create rag-studio-data-restore
 docker run --rm \
   -v rag-studio-data-restore:/restore \
   -v "$PWD/backups:/backup:ro" \
   busybox:1.37.0 \
-  tar -C /restore -xzf /backup/rag-studio-<时间>.tar.gz
+  tar -C /restore -xzf /backup/rag-platform-<时间>.tar.gz
 RAG_DATA_VOLUME=rag-studio-data-restore docker compose up -d
 curl --fail http://127.0.0.1:8000/health/ready
 ```

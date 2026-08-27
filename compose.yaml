@@ -1,8 +1,8 @@
-name: rag-studio
+name: rag-platform
 
 services:
   api:
-    image: rag-studio:${RAG_IMAGE_TAG:-local}
+    image: rag-platform:${RAG_IMAGE_TAG:-local}
     build:
       context: .
       dockerfile: Dockerfile
@@ -62,4 +62,6 @@ services:
 
 volumes:
   data:
+    # Retained across the RAG Studio -> RAG Platform rebrand so existing data
+    # remains mounted after an in-place upgrade.
     name: ${RAG_DATA_VOLUME:-rag-studio-data}

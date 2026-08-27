@@ -1,13 +1,13 @@
 groups:
-  - name: rag-studio-service
+  - name: rag-platform-service
     rules:
       - alert: RAGMetricsTargetDown
-        expr: up{job="rag-studio"} == 0
+        expr: up{job="rag-platform"} == 0
         for: 2m
         labels:
           severity: critical
         annotations:
-          summary: RAG Studio metrics target is unavailable
+          summary: RAG Platform metrics target is unavailable
           description: The metrics scrape target has been down for at least two minutes.
 
       - alert: RAGRequestErrorRateHigh
@@ -16,7 +16,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: RAG Studio request error rate is above 5 percent
+          summary: RAG Platform request error rate is above 5 percent
           description: Investigate API errors, structured event logs, and recent deployments.
 
       - alert: RAGAnswerLatencyP95High
@@ -25,7 +25,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: RAG Studio answer latency p95 exceeds 5 seconds
+          summary: RAG Platform answer latency p95 exceeds 5 seconds
           description: Check capacity, model cold starts, provider latency, and workload size.
 
       - alert: RAGExternalProviderFailuresHigh
@@ -34,7 +34,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: RAG Studio external provider failures are elevated
+          summary: RAG Platform external provider failures are elevated
           description: Inspect provider, operation, and error_type labels without logging request content.
 
       - alert: RAGIndexBuildFailure
@@ -42,7 +42,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: A RAG Studio index build failed
+          summary: A RAG Platform index build failed
           description: Inspect the affected job and storage capacity before retrying the import.
 
       - alert: RAGRateLimitPressure
@@ -51,5 +51,5 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: RAG Studio is rate limiting more than 10 percent of requests
+          summary: RAG Platform is rate limiting more than 10 percent of requests
           description: Confirm abusive traffic is controlled, then review capacity and configured limits.

@@ -1,4 +1,4 @@
-"""ASGI entry point for the durable RAG Studio API."""
+"""ASGI entry point for the durable RAG Platform API."""
 
 from __future__ import annotations
 

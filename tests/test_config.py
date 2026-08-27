@@ -25,7 +25,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertGreaterEqual(settings.max_jobs, settings.job_workers)
         self.assertGreater(settings.job_history_ttl_seconds, settings.job_ttl_seconds)
         self.assertGreaterEqual(settings.job_history_max_per_tenant, settings.max_jobs)
-        self.assertEqual(settings.product_name, "RAG Studio")
+        self.assertEqual(settings.product_name, "RAG Platform")
 
     def test_invalid_chunking_and_url_are_rejected(self) -> None:
         settings = Settings()

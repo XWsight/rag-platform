@@ -1,4 +1,4 @@
-"""Create a safe, reviewable derivative layer for a copied RAG Studio base."""
+"""Create a safe, reviewable derivative layer for a copied RAG Platform base."""
 
 from __future__ import annotations
 

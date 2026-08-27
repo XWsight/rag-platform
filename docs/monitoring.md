@@ -7,23 +7,23 @@
 仓库提供两份可审查的起始资产：
 
 - `monitoring/prometheus/prometheus.example.yml`：Prometheus 抓取配置示例。
-- `monitoring/prometheus/rules/rag-studio.yml`：应用可观测指标对应的告警规则。
+- `monitoring/prometheus/rules/rag-platform.yml`：应用可观测指标对应的告警规则。
 
 它们是示例而非 Compose 服务。先复制到受控的监控配置目录，核对网络边界和访问权限，再由
 现有 Prometheus/Alertmanager 部署加载。不要把真实 Key、Alertmanager URL 或生产主机名提交到 Git。
 
 ## 最小部署步骤
 
-1. 为 Prometheus 单独创建一个仅含 `operator` 角色的高熵 API Key，并把**原始 Key**写入一个只允许 Prometheus 进程读取的文件，例如 `/etc/prometheus/secrets/rag-studio-operator.token`。`bearer_token_file` 会自动添加 `Authorization: Bearer`，文件中不应写 `Bearer ` 前缀。
+1. 为 Prometheus 单独创建一个仅含 `operator` 角色的高熵 API Key，并把**原始 Key**写入一个只允许 Prometheus 进程读取的文件，例如 `/etc/prometheus/secrets/rag-platform-operator.token`。`bearer_token_file` 会自动添加 `Authorization: Bearer`，文件中不应写 `Bearer ` 前缀。
 2. 从示例复制配置与规则文件，替换示例 target。Prometheus 在宿主机运行时可使用私网地址；若它加入与应用相同的 Compose 网络，可使用 `api:8000`。不要为了方便把应用端口暴露到公网。
 3. 在 Prometheus 中检查配置和规则：
 
    ```bash
    promtool check config /etc/prometheus/prometheus.yml
-   promtool check rules /etc/prometheus/rules/rag-studio.yml
+   promtool check rules /etc/prometheus/rules/rag-platform.yml
    ```
 
-4. 重载 Prometheus，随后确认 Targets 页面中的 `rag-studio` 为 `UP`，并在告警系统中为每条规则设置实际负责人、通知路由和升级路径。
+4. 重载 Prometheus，随后确认 Targets 页面中的 `rag-platform` 为 `UP`，并在告警系统中为每条规则设置实际负责人、通知路由和升级路径。
 
 初始阈值故意保守：持续 5xx、p95 问答延迟、外部供应商失败、索引构建失败以及持续限流。运行一到两个业务周期后，应根据真实负载、RTO/SLO 与发布窗口校准阈值；不要将示例阈值直接视为产品 SLA。
 

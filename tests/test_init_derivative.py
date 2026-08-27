@@ -64,7 +64,7 @@ class InitDerivativeTests(unittest.TestCase):
                 json.dumps(
                     {
                         "schema_version": 1,
-                        "base_project": "rag-studio",
+                        "base_project": "rag-platform",
                         "base_revision": "0123456",
                         "base_api_major": 3,
                     }
@@ -73,6 +73,23 @@ class InitDerivativeTests(unittest.TestCase):
             )
             with self.assertRaises(DerivativeCompatibilityError):
                 validate_compatibility(manifest, base_root=Path.cwd())
+
+    def test_accepts_the_legacy_base_identity_for_existing_derivatives(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = Path(directory) / "compatibility.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "base_project": "rag-studio",
+                        "base_revision": "0123456",
+                        "base_api_major": 2,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertTrue(validate_compatibility(manifest, base_root=Path.cwd())["compatible"])
 
     def test_accepts_an_explicit_base_revision_for_a_reproducible_baseline(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -20,7 +20,9 @@ DEFAULT_REQUIREMENTS = PROJECT_ROOT / "requirements.txt"
 DEFAULT_POLICY = PROJECT_ROOT / "security" / "dependency-exceptions.json"
 _MAX_POLICY_BYTES = 64 * 1024
 _MAX_EXCEPTIONS = 16
-_AUDIT_TIMEOUT_SECONDS = 45
+_DEFAULT_AUDIT_TIMEOUT_SECONDS = 120
+_MIN_AUDIT_TIMEOUT_SECONDS = 30
+_MAX_AUDIT_TIMEOUT_SECONDS = 300
 _VULNERABILITY_ID = re.compile(r"(?:PYSEC-\d{4}-\d+|CVE-\d{4}-\d+|GHSA-[a-z0-9-]+)")
 _PACKAGE_NAME = re.compile(r"[a-z0-9]+(?:[-_.][a-z0-9]+)*")
 _VERSION = re.compile(r"[A-Za-z0-9]+(?:[A-Za-z0-9._+-]*[A-Za-z0-9])?")
@@ -326,10 +328,12 @@ def evaluate_findings(
 def run_audit(
     requirements_path: Path,
     exceptions: tuple[DependencyException, ...],
+    *,
+    timeout_seconds: int = _DEFAULT_AUDIT_TIMEOUT_SECONDS,
 ) -> int:
     process = _start_audit_process(requirements_path)
     try:
-        stdout, stderr = process.communicate(timeout=_AUDIT_TIMEOUT_SECONDS)
+        stdout, stderr = process.communicate(timeout=timeout_seconds)
     except subprocess.TimeoutExpired:
         _terminate_process_tree(process)
         # Draining the pipes after termination prevents a zombie process on
@@ -337,7 +341,7 @@ def run_audit(
         # pip-audit may create an isolated Python and pip child process.
         stdout, stderr = process.communicate()
         print(
-            f"dependency audit timed out after {_AUDIT_TIMEOUT_SECONDS} seconds",
+            f"dependency audit timed out after {timeout_seconds} seconds",
             file=sys.stderr,
         )
         return 2
@@ -407,11 +411,29 @@ def _terminate_process_tree(process: subprocess.Popen[str]) -> None:
     process.kill()
 
 
+def _audit_timeout(value: str) -> int:
+    try:
+        timeout_seconds = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("audit timeout must be an integer") from error
+    if not _MIN_AUDIT_TIMEOUT_SECONDS <= timeout_seconds <= _MAX_AUDIT_TIMEOUT_SECONDS:
+        raise argparse.ArgumentTypeError(
+            f"audit timeout must be {_MIN_AUDIT_TIMEOUT_SECONDS}-{_MAX_AUDIT_TIMEOUT_SECONDS} seconds"
+        )
+    return timeout_seconds
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--requirements", type=Path, default=DEFAULT_REQUIREMENTS)
     parser.add_argument("--policy", type=Path, default=DEFAULT_POLICY)
     parser.add_argument("--validate-only", action="store_true")
+    parser.add_argument(
+        "--timeout-seconds",
+        type=_audit_timeout,
+        default=_DEFAULT_AUDIT_TIMEOUT_SECONDS,
+        help="Bound the pip-audit subprocess (30-300 seconds; default: 120).",
+    )
     arguments = parser.parse_args(argv)
     try:
         exceptions = load_policy(arguments.policy, arguments.requirements)
@@ -427,7 +449,11 @@ def main(argv: list[str] | None = None) -> int:
         )
     if arguments.validate_only:
         return 0
-    return run_audit(arguments.requirements, exceptions)
+    return run_audit(
+        arguments.requirements,
+        exceptions,
+        timeout_seconds=arguments.timeout_seconds,
+    )
 
 
 if __name__ == "__main__":

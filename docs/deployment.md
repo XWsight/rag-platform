@@ -91,7 +91,7 @@ Dockerfile 固定 Python 补丁版本，先生成 wheel 集合，再在运行阶
 
 ```bash
 RAG_IMAGE_TAG=2026.08.11-1 docker compose build --pull
-docker image inspect rag-studio:2026.08.11-1 --format '{{json .RepoDigests}}'
+docker image inspect rag-platform:2026.08.11-1 --format '{{json .RepoDigests}}'
 ```
 
 正式环境应记录代码提交、镜像 digest、配置版本、数据快照和部署时间。输出为 `[]` 或 `null` 表示镜像尚未推送到仓库，此时不能声称它是可跨主机验证的不可变制品。
@@ -100,7 +100,7 @@ docker image inspect rag-studio:2026.08.11-1 --format '{{json .RepoDigests}}'
 
 推送与稳定 `pyproject.toml` 版本完全一致的 `v<version>` Git tag 后，`release` workflow 会附上 SPDX
 SBOM、release manifest 和不可变 `image@sha256:...` 引用并创建 GitHub Release。当前开发版本带 `.dev`，因此会被工作流拒绝，避免把开发
-快照误标为正式发行。稳定 tag 会把镜像推送至 `ghcr.io/<owner>/rag-system`，生成 BuildKit provenance/SBOM，
+快照误标为正式发行。稳定 tag 会把镜像推送至 `ghcr.io/<owner>/rag-platform`，生成 BuildKit provenance/SBOM，
 并提交 GitHub build provenance attestation；部署时必须记录和固定该镜像 digest，不能只引用可变 tag。
 首次发布前需在仓库 Settings 中确认 GitHub Actions 具有 Packages 写入权限，并按组织策略将 GHCR 包设为
 公开或授权给目标运行环境。该证明只覆盖 GitHub Actions 构建链路，不替代运行时密钥管理、发布审批或离机备份。

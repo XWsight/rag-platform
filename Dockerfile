@@ -29,8 +29,8 @@ ARG APP_UID=10001
 ARG APP_GID=10001
 ARG VCS_REF
 
-LABEL org.opencontainers.image.title="RAG Studio" \
-      org.opencontainers.image.source="https://github.com/XWsight/rag-system" \
+LABEL org.opencontainers.image.title="RAG Platform" \
+      org.opencontainers.image.source="https://github.com/XWsight/rag-platform" \
       org.opencontainers.image.revision="${VCS_REF}"
 
 ENV PYTHONUNBUFFERED=1 \

@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from starlette.concurrency import run_in_threadpool
 
+from rag_system import __version__
 from rag_system.api_answer_routes import register_answer_routes
 from rag_system.api_contract import (
     AnswerPayload,
@@ -71,7 +72,7 @@ def create_app(
     app = FastAPI(
         title=f"{settings.product_name} API",
         summary="Tenant-isolated, grounded knowledge retrieval and answering.",
-        version="2.0.0",
+        version=__version__,
         docs_url="/docs" if settings.api_docs_enabled else None,
         redoc_url="/redoc" if settings.api_docs_enabled else None,
         openapi_url="/openapi.json" if settings.api_docs_enabled else None,

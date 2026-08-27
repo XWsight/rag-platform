@@ -141,7 +141,7 @@ class DependencyAuditPolicyTests(unittest.TestCase):
             ), patch("scripts.audit_dependencies.os.name", "nt"), patch(
                 "scripts.audit_dependencies.subprocess.run"
             ) as terminate:
-                self.assertEqual(run_audit(requirements, exceptions), 2)
+                self.assertEqual(run_audit(requirements, exceptions, timeout_seconds=47), 2)
             terminate.assert_called_once_with(
                 ("taskkill", "/PID", "4242", "/T", "/F"),
                 check=False,
@@ -150,6 +150,7 @@ class DependencyAuditPolicyTests(unittest.TestCase):
                 timeout=10,
             )
             self.assertEqual(process.communicate.call_count, 2)
+            self.assertEqual(process.communicate.call_args_list[0].kwargs["timeout"], 47)
 
 
 if __name__ == "__main__":

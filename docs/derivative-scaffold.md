@@ -1,6 +1,6 @@
 # 派生项目脚手架
 
-这个脚手架为已经复制或 fork 的 RAG Studio 基座创建一个**独立派生层**；它不复制运行时、
+这个脚手架为已经复制或 fork 的 RAG Platform 基座创建一个**独立派生层**；它不复制运行时、
 不改写基座文件，也不生成或移动密钥。派生层通过明确的组合根注入自定义 Provider，因而可以
 随时与上游基座同步。
 
@@ -44,7 +44,7 @@ python scripts\init_derivative.py `
    指标和回滚方式。
 
 同步前额外运行 `python scripts\validate_derivative_compatibility.py <派生目录>\compatibility.json`；
-它会拒绝未知 schema、非 RAG Studio 基座或不兼容的 API major。
+它会拒绝未知 schema、非 RAG Platform 基座或不兼容的 API major。
 
 ## 领域评测发布门禁
 

@@ -1,4 +1,4 @@
-"""Validate a derivative layer's declared compatibility with this RAG Studio base."""
+"""Validate a derivative layer's declared compatibility with this RAG Platform base."""
 
 from __future__ import annotations
 
@@ -13,6 +13,10 @@ from typing import Any
 
 _FIELDS = frozenset({"schema_version", "base_project", "base_revision", "base_api_major"})
 _REVISION = re.compile(r"(?:unrecorded|[0-9a-f]{7,64})")
+# ``rag-studio`` is the published identity before the repository rebrand.  It
+# remains valid for schema v1 manifests so existing derived projects can
+# upgrade deliberately rather than being rejected by a cosmetic rename.
+_SUPPORTED_BASE_PROJECTS = frozenset({"rag-platform", "rag-studio"})
 
 
 class DerivativeCompatibilityError(ValueError):
@@ -26,7 +30,7 @@ def validate_compatibility(path: Path, *, base_root: Path) -> dict[str, object]:
         raise DerivativeCompatibilityError("compatibility manifest cannot be read") from error
     if not isinstance(payload, dict) or frozenset(payload) != _FIELDS:
         raise DerivativeCompatibilityError("compatibility manifest fields are invalid")
-    if payload["schema_version"] != 1 or payload["base_project"] != "rag-studio":
+    if payload["schema_version"] != 1 or payload["base_project"] not in _SUPPORTED_BASE_PROJECTS:
         raise DerivativeCompatibilityError("compatibility manifest base is unsupported")
     if not isinstance(payload["base_revision"], str) or _REVISION.fullmatch(payload["base_revision"]) is None:
         raise DerivativeCompatibilityError("compatibility manifest revision is invalid")

@@ -1,6 +1,6 @@
 # 系统架构
 
-本文描述 `rag-studio` 当前代码所实现的边界。生产形态是一个可持久化的单节点服务：FastAPI 进程、进程内工作线程、SQLite 元数据、租户文件目录和受限本地向量索引共享同一持久卷。它不是无共享的分布式系统，也不应把本文当作尚未执行的性能或安全测试报告。
+本文描述 `rag-platform` 当前代码所实现的边界。生产形态是一个可持久化的单节点服务：FastAPI 进程、进程内工作线程、SQLite 元数据、租户文件目录和受限本地向量索引共享同一持久卷。它不是无共享的分布式系统，也不应把本文当作尚未执行的性能或安全测试报告。
 
 ## 设计目标
 
@@ -194,7 +194,7 @@ sequenceDiagram
 ├── catalog.sqlite3       # schema v4：准备/索引状态、耐久取消与不可变文档清单
 ├── idempotency.sqlite3   # 创建请求预留与结果绑定
 ├── jobs.sqlite3          # 有界、租户隔离的 job 状态与结果快照归档
-├── .rag-studio.instance  # 单节点进程独占锁文件
+├── .rag-studio.instance    # 历史兼容的单节点进程独占锁文件
 ├── documents/            # tenant-<sha256>/<document-resource>/<filename>
 └── vector/               # 原子写入的本地向量索引文件
 ```

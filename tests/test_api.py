@@ -7,6 +7,7 @@ import unittest
 
 from fastapi.testclient import TestClient
 
+from rag_system import __version__
 from rag_system.api import create_app
 from rag_system.application import IdempotencyInProgressError, KnowledgeBaseSubmission
 from rag_system.catalog import DocumentManifest, KnowledgeBaseRecord, KnowledgeBaseStatus
@@ -207,6 +208,7 @@ class ApiTests(unittest.TestCase):
             rate_limiter=TokenBucketRateLimiter(rate_per_second=100, capacity=100),
             logger=self.logger,
         )
+        self.assertEqual(self.app.version, __version__)
         self.client_context = TestClient(self.app, raise_server_exceptions=False)
         self.client = self.client_context.__enter__()
 
@@ -253,7 +255,7 @@ class ApiTests(unittest.TestCase):
 
         page = self.client.get("/app")
         self.assertEqual(page.status_code, 200)
-        self.assertIn("RAG Studio", page.text)
+        self.assertIn("RAG Platform", page.text)
         self.assertIn("外部服务授权", page.text)
         self.assertIn("资料详情", page.text)
         self.assertIn("/app/assets/app.js", page.text)
@@ -266,7 +268,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(configuration.status_code, 200)
         self.assertEqual(
             configuration.json(),
-            {"product_name": "RAG Studio", "product_tagline": "Evidence workspace"},
+            {"product_name": "RAG Platform", "product_tagline": "Evidence workspace"},
         )
         self.assertEqual(configuration.headers["cache-control"], "no-store")
 

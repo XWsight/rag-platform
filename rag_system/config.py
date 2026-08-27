@@ -76,7 +76,7 @@ class Settings:
     api_docs_enabled: bool = field(
         default_factory=lambda: _env_bool("RAG_API_DOCS_ENABLED", True)
     )
-    product_name: str = field(default_factory=lambda: _env_text("RAG_PRODUCT_NAME", "RAG Studio"))
+    product_name: str = field(default_factory=lambda: _env_text("RAG_PRODUCT_NAME", "RAG Platform"))
     product_tagline: str = field(
         default_factory=lambda: _env_text(
             "RAG_PRODUCT_TAGLINE", "Evidence workspace"

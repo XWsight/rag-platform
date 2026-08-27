@@ -1,6 +1,6 @@
 # {{PRODUCT_NAME}}
 
-This folder is a derivative layer generated from the RAG Studio base. It intentionally does not
+This folder is a derivative layer generated from the RAG Platform base. It intentionally does not
 copy the base runtime: retain the base package, its security boundaries, quality gates, and
 deployment files, then add domain-specific code here.
 
@@ -34,7 +34,7 @@ mandatory. This layer must not bypass claim/citation validation, tenant isolatio
 outbound authorization.
 # Compatibility
 
-Before upgrading this layer to a newer RAG Studio base, run:
+Before upgrading this layer to a newer RAG Platform base, run:
 
 ```powershell
 python scripts\validate_derivative_compatibility.py {{PACKAGE_NAME}}\compatibility.json
