@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+import warnings
 import zipfile
 from dataclasses import replace
 from html import escape
@@ -114,6 +115,16 @@ class SecureDocumentLoaderTests(unittest.TestCase):
             with self.assertRaises(DocumentLoadError):
                 SecureDocumentLoader(limits).load_one(bomb)
 
+    def test_docx_rejects_duplicate_members_before_parsing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "duplicate.docx")
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                write_docx(path, ["正文"], extra_members={"word/document.xml": b"duplicate"})
+
+            with self.assertRaises(DocumentLoadError):
+                SecureDocumentLoader().load_one(path)
+
     def test_file_character_paragraph_and_format_limits_are_enforced(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -189,6 +200,25 @@ class SecureDocumentLoaderTests(unittest.TestCase):
             loader = SecureDocumentLoader(limits, pdf_reader_factory=lambda _: Reader())
             with self.assertRaises(DocumentLoadError):
                 loader.load_one(path)
+
+    def test_parser_failures_have_safe_format_specific_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            page = root / "page.html"
+            page.write_text("<p>safe</p>", encoding="utf-8")
+            with patch("rag_system.document_parsing._VisibleHTMLParser.feed", side_effect=RuntimeError):
+                with self.assertRaises(DocumentLoadError):
+                    SecureDocumentLoader().load_one(page)
+
+            pdf = root / "encrypted.pdf"
+            pdf.write_bytes(b"%PDF-1.4\nminimal")
+
+            class EncryptedReader:
+                is_encrypted = True
+                pages: list[object] = []
+
+            with self.assertRaisesRegex(DocumentLoadError, "加密 PDF"):
+                SecureDocumentLoader(pdf_reader_factory=lambda _: EncryptedReader()).load_one(pdf)
 
     def test_invalid_limits_are_rejected(self) -> None:
         with self.assertRaises(ValueError):

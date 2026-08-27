@@ -11,6 +11,7 @@ FRAMEWORK_NEUTRAL_MODULES = (
     "rag_system/application_ports.py",
     "rag_system/answer_workflow.py",
     "rag_system/domain.py",
+    "rag_system/document_parsing.py",
     "rag_system/ports.py",
     "rag_system/grounding.py",
     "rag_system/answer_protocol.py",
@@ -24,6 +25,7 @@ FRAMEWORK_NEUTRAL_MODULES = (
     "rag_system/job_contracts.py",
     "rag_system/knowledge_base_contracts.py",
     "rag_system/knowledge_base_lifecycle.py",
+    "rag_system/loader_contracts.py",
     "rag_system/retrieval_experiments.py",
     "rag_system/runtime_profile.py",
 )
