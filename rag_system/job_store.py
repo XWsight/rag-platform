@@ -6,8 +6,8 @@ import json
 import math
 import sqlite3
 import time
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable
+from contextlib import AbstractContextManager
 from pathlib import Path
 from threading import RLock
 from typing import Any, cast
@@ -21,6 +21,7 @@ from rag_system.job_contracts import (
     job_id_value,
     require_job_text,
 )
+from rag_system.sqlite_support import SqliteDatabase
 
 
 _SCHEMA_VERSION = 1
@@ -76,6 +77,11 @@ class SqliteJobSnapshotStore:
         self._max_records_per_tenant = max_records_per_tenant
         self._clock = clock
         self._timeout_seconds = float(timeout_seconds)
+        self._database = SqliteDatabase(
+            self._database_path,
+            timeout_seconds=self._timeout_seconds,
+            require_wal=False,
+        )
         self._write_lock = RLock()
         self._initialize()
 
@@ -290,38 +296,18 @@ class SqliteJobSnapshotStore:
             raise JobStorageError("job snapshot clock returned an invalid timestamp")
         return value
 
-    @contextmanager
-    def _connection(self) -> Iterator[sqlite3.Connection]:
-        connection: sqlite3.Connection | None = None
-        try:
-            connection = sqlite3.connect(
-                self._database_path,
-                timeout=self._timeout_seconds,
-                isolation_level=None,
-            )
-            connection.row_factory = sqlite3.Row
-            connection.execute("PRAGMA foreign_keys = ON")
-            connection.execute("PRAGMA journal_mode = WAL")
-            yield connection
-        finally:
-            if connection is not None:
-                connection.close()
+    def _connection(self) -> AbstractContextManager[sqlite3.Connection]:
+        return self._database.read(_job_storage_error)
 
-    @contextmanager
-    def _transaction(self) -> Iterator[sqlite3.Connection]:
-        try:
-            with self._connection() as connection:
-                connection.execute("BEGIN IMMEDIATE")
-                try:
-                    yield connection
-                except Exception:
-                    connection.rollback()
-                    raise
-                connection.commit()
-        except JobStorageError:
-            raise
-        except sqlite3.Error as error:
-            raise JobStorageError("job snapshot storage operation failed") from error
+    def _transaction(self) -> AbstractContextManager[sqlite3.Connection]:
+        return self._database.immediate_transaction(
+            _job_storage_error,
+            pass_through=(JobStorageError,),
+        )
+
+
+def _job_storage_error() -> JobStorageError:
+    return JobStorageError("job snapshot storage operation failed")
 
 
 def _validate_tenant_id(value: str) -> str:

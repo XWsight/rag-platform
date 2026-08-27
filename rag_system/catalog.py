@@ -6,8 +6,8 @@ import json
 import secrets
 import sqlite3
 import time
-from collections.abc import Callable, Iterator, Sequence
-from contextlib import contextmanager
+from collections.abc import Callable, Sequence
+from contextlib import AbstractContextManager
 from pathlib import Path
 from threading import RLock
 from typing import Any, cast
@@ -30,6 +30,7 @@ from rag_system.knowledge_base_contracts import (
     validate_internal_index_id,
     validate_resource_id,
 )
+from rag_system.sqlite_support import SqliteDatabase
 
 
 _SCHEMA_VERSION = 4
@@ -90,6 +91,10 @@ class KnowledgeBaseCatalog:
         self._database_path = path.resolve()
         self._clock = clock
         self._timeout_seconds = float(timeout_seconds)
+        self._database = SqliteDatabase(
+            self._database_path,
+            timeout_seconds=self._timeout_seconds,
+        )
         self._write_lock = RLock()
         self._initialize()
 
@@ -501,63 +506,21 @@ class KnowledgeBaseCatalog:
         return value
 
     def _connect(self) -> sqlite3.Connection:
-        connection: sqlite3.Connection | None = None
-        try:
-            connection = sqlite3.connect(
-                self._database_path,
-                timeout=self._timeout_seconds,
-                isolation_level=None,
-            )
-            connection.row_factory = sqlite3.Row
-            connection.execute("PRAGMA foreign_keys = ON")
-            connection.execute(f"PRAGMA busy_timeout = {int(self._timeout_seconds * 1000)}")
-            mode = str(connection.execute("PRAGMA journal_mode = WAL").fetchone()[0]).lower()
-            if mode != "wal":
-                raise CatalogStorageError()
-            return connection
-        except CatalogStorageError:
-            if connection is not None:
-                connection.close()
-            raise
-        except sqlite3.Error as exc:
-            if connection is not None:
-                connection.close()
-            raise CatalogStorageError() from exc
+        return self._database.connect(CatalogStorageError)
 
-    @contextmanager
-    def _read_connection(self) -> Iterator[sqlite3.Connection]:
-        connection = self._connect()
-        try:
-            yield connection
-        except sqlite3.Error as exc:
-            raise CatalogStorageError() from exc
-        finally:
-            connection.close()
+    def _read_connection(self) -> AbstractContextManager[sqlite3.Connection]:
+        return self._database.read(CatalogStorageError)
 
-    @contextmanager
     def _write_transaction(
         self,
         *,
         validate_schema: bool = True,
-    ) -> Iterator[sqlite3.Connection]:
-        connection = self._connect()
-        try:
-            connection.execute("BEGIN IMMEDIATE")
-            if validate_schema:
-                self._validate_schema(connection)
-            yield connection
-            connection.commit()
-        except CatalogError:
-            connection.rollback()
-            raise
-        except sqlite3.Error as exc:
-            connection.rollback()
-            raise CatalogStorageError() from exc
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
+    ) -> AbstractContextManager[sqlite3.Connection]:
+        return self._database.immediate_transaction(
+            CatalogStorageError,
+            pass_through=(CatalogError,),
+            before_write=self._validate_schema if validate_schema else None,
+        )
 
 
 _CREATE_TABLE_SQL = """
