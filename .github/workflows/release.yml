@@ -15,10 +15,10 @@ jobs:
   publish-release-evidence:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -41,7 +41,7 @@ jobs:
           --json-output reports/release-manifest.json
       - name: Prepare OCI image metadata
         id: image
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
@@ -50,7 +50,7 @@ jobs:
             type=raw,value=latest
       - name: Build and publish immutable container image
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
@@ -60,7 +60,7 @@ jobs:
           provenance: mode=max
           sbom: true
       - name: Attest published image provenance
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-name: ghcr.io/${{ github.repository }}
           subject-digest: ${{ steps.build.outputs.digest }}
