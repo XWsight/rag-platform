@@ -22,7 +22,7 @@
    install -d -m 700 secrets
    printf '%s' '{"replace-with-a-long-random-key":{"subject":"production","tenant_id":"production","roles":["reader","writer","operator"]}}' > secrets/rag_api_keys_json
    printf '%s' 'provider-key-if-needed' > secrets/zhipu_api_key
-   chmod 600 secrets/rag_api_keys_json secrets/zhipu_api_key
+   chmod 0444 secrets/rag_api_keys_json secrets/zhipu_api_key
    ```
 
 2. 删除 `.env` 中的 `RAG_API_KEYS_JSON` 与 `ZHIPU_API_KEY` 值，或保留占位符；覆盖文件会
@@ -35,7 +35,9 @@
    docker compose -f compose.yaml -f compose.secrets.example.yaml up -d
    ```
 
-提供商未使用时，`secrets/zhipu_api_key` 可以是空文件。API Key JSON 文件不能为空，且仍会
+目录权限负责保护宿主机上的文件；Compose 的 file secret 挂载需要容器中的非 root `app` 用户
+可读，因此文件使用 `0444`。不要在共享或可被其他主机用户遍历的目录中保存它们。提供商未使用时，
+`secrets/zhipu_api_key` 可以是空文件。API Key JSON 文件不能为空，且仍会
 按启动时的严格凭据规则校验。部署平台已有 Vault、Kubernetes Secret 或云密钥管理服务时，
 应以只读普通文件方式挂载到容器，并设置同名 `*_FILE` 变量；不要为了兼容而恢复明文环境变量。
 
