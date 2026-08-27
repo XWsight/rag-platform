@@ -13,8 +13,7 @@ $pythonExecutable = if ($configuredPython) {
 } else {
     throw @"
 Missing project virtual environment. Create the supported development environment first:
-  py -3.11 -m venv .venv
-  .\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-dev.txt
+  powershell -ExecutionPolicy Bypass -File scripts/bootstrap_dev.ps1
 
 To use another already-prepared Python 3.11 or 3.12 environment explicitly, set RAG_PYTHON to its executable path.
 "@
