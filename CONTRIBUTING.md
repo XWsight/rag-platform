@@ -9,11 +9,12 @@
 支持 Python 3.11 和 3.12。建议使用独立虚拟环境：
 
 ```powershell
-py -3.11 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt -r requirements-dev.txt
+powershell -ExecutionPolicy Bypass -File scripts/bootstrap_dev.ps1
 ```
+
+该脚本默认使用 Python 3.11，按对应哈希锁安装运行时、开发工具和项目本身，并准备 Node 24/Playwright。
+传入 `-PythonVersion 3.12` 可选择另一个受支持版本，`-SkipBrowser` 可跳过 Node/Chromium 安装。
+它不会覆盖已有 `.venv`；若要切换 Python 版本，应先由开发者手动删除该环境。
 
 不要提交 `.env`、真实 API Key、模型缓存、`.rag_data`、评测报告或客户数据。单元测试不应依赖真实云凭据；通过协议、fake provider、临时目录和可控时钟隔离外部状态。
 
@@ -42,14 +43,13 @@ python -m pip install -r requirements.txt -r requirements-dev.txt
 Windows 上运行完整本地检查：
 
 ```powershell
-# The checker intentionally uses .venv and refuses unsupported system Python.
+# 检查脚本只使用 .venv，并拒绝不受支持的系统 Python。
 powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 ```
 
-`scripts/check.ps1` only uses `.venv\Scripts\python.exe` by default. If an
-already prepared Python 3.11/3.12 environment must be used instead, pass its
-absolute executable path explicitly with `$env:RAG_PYTHON = 'C:\path\to\python.exe'`.
-Run `npm ci` before the full check so the Playwright runner is present.
+`scripts/check.ps1` 默认只使用 `.venv\Scripts\python.exe`。如需使用其他已准备好的
+Python 3.11/3.12 环境，必须通过 `$env:RAG_PYTHON = 'C:\path\to\python.exe'` 显式指定。
+`bootstrap_dev.ps1` 会一并安装 Playwright 依赖；手动建环境时，先运行 `npm ci`。
 
 它依次执行 compileall、Ruff、带分支覆盖率的 unittest、覆盖率门槛和 `git diff --check`。也可以单独运行：
 

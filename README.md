@@ -102,14 +102,14 @@ git clone https://github.com/XWsight/rag-platform.git
 cd rag-platform
 git switch main
 
-py -3.11 -m venv .venv
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-# 安装当前源码包，启用 `rag-platform-*` 命令，同时不重新解析已锁定的依赖。
-python -m pip install -e . --no-deps
+powershell -ExecutionPolicy Bypass -File scripts\bootstrap_dev.ps1
 Copy-Item .env.example .env
 ```
+
+初始化脚本默认创建 Python 3.11 的 `.venv`，按哈希锁安装运行时与开发工具，安装当前源码包、
+Node 依赖和 Chromium。需要 Python 3.12 时传入 `-PythonVersion 3.12`；只准备 Python 环境时可传入
+`-SkipBrowser`。脚本不会删除或覆盖已有 `.venv`。
 
 浏览器端关键流程使用 Playwright 对真实 HTTP API 运行回归，而不是在测试中替换
 `fetch`。首次准备一次浏览器运行时后即可执行：
