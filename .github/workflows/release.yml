@@ -64,6 +64,12 @@ jobs:
           subject-name: ghcr.io/${{ github.repository }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
+      - name: Install Sigstore Cosign
+        uses: sigstore/cosign-installer@v3
+      - name: Keylessly sign the immutable image digest
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "$IMAGE"
       - name: Record immutable image reference
         run: >-
           python scripts/release_image_evidence.py

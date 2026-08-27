@@ -61,3 +61,24 @@ test("external options require explicit consent and keep the local default", asy
   await expect(cloud).not.toBeChecked();
   await expect(page.locator("#privacy-note")).toHaveText("内容不会发送到外部服务");
 });
+
+test("the workbench keeps authentication and ingestion failures actionable", async ({page}) => {
+  await page.goto("/app");
+  await page.getByLabel("API Key").fill("wrong-key-0123456789");
+  await page.getByRole("button", {name: "安全连接"}).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.locator("#key-error")).toHaveText("密钥验证失败，请重新复制。");
+
+  await page.getByLabel("API Key").fill(API_KEY);
+  await page.getByRole("button", {name: "安全连接"}).click();
+  await page.getByRole("button", {name: "新建知识库"}).click();
+  await page.getByLabel("知识库名称").fill("故障资料");
+  await page.locator("#documents").setInputFiles({
+    name: "unavailable.md",
+    mimeType: "text/markdown",
+    buffer: Buffer.from("evidence"),
+  });
+  await page.getByRole("button", {name: "开始建立索引"}).click();
+  await expect(page.locator("#create-error")).toHaveText("The service is temporarily unavailable.");
+  await expect(page.locator("#task-banner")).toHaveClass(/hidden/);
+});

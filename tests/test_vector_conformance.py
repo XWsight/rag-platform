@@ -54,6 +54,20 @@ class VectorConformanceTests(unittest.TestCase):
         with self.assertRaises(VectorRepositoryConformanceError):
             verify_index_repository(BadRepository())
 
+    def test_cross_index_result_leakage_is_rejected(self) -> None:
+        class LeakyRepository(_Repository):
+            def __init__(self) -> None:
+                super().__init__()
+                self.first_chunks = ()
+
+            def build(self, index_id, chunks):
+                if not self.first_chunks:
+                    self.first_chunks = tuple(chunks)
+                return super().build(index_id, self.first_chunks)
+
+        with self.assertRaisesRegex(VectorRepositoryConformanceError, "search hit"):
+            verify_index_repository(LeakyRepository())
+
 
 if __name__ == "__main__":
     unittest.main()

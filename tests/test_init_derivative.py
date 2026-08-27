@@ -53,6 +53,7 @@ class InitDerivativeTests(unittest.TestCase):
                 created / ".github" / "workflows" / "derivative-evaluation.yml"
             ).read_text(encoding="utf-8")
             self.assertIn("--require-ready", workflow)
+            self.assertIn("validate_derivative_compatibility.py", workflow)
             self.assertIn("legal_assistant/evals/governance.json", workflow)
             self.assertNotIn("{{", workflow)
 

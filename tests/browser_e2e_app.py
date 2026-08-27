@@ -12,6 +12,7 @@ import io
 import logging
 
 from rag_system.api import create_app
+from rag_system.application import PlatformUnavailableError
 from rag_system.catalog import KnowledgeBaseStatus
 from rag_system.observability import JsonEventLogger
 from rag_system.rate_limit import TokenBucketRateLimiter
@@ -34,6 +35,8 @@ class BrowserE2EPlatform(FakePlatform):
         documents: object,
         idempotency_key: str,
     ):
+        if display_name == "故障资料":
+            raise PlatformUnavailableError("fixture indexing backend unavailable")
         submission = super().create_knowledge_base(
             principal,
             display_name=display_name,
