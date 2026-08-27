@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import os
+import tempfile
 import unittest
 from dataclasses import replace
+from pathlib import Path
 from unittest.mock import patch
 
 from rag_system.config import SecretValue, Settings
@@ -14,6 +16,75 @@ class ConfigurationTests(unittest.TestCase):
         self.assertNotIn("very-private-value", repr(secret))
         self.assertNotIn("very-private-value", str(secret))
         self.assertEqual(secret.reveal(), "very-private-value")
+
+    def test_secret_file_source_is_loaded_without_retaining_its_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            secret_path = Path(directory) / "api-keys.json"
+            secret_path.write_text("from-secret-file\n", encoding="utf-8")
+            with patch.dict(
+                os.environ,
+                {"RAG_API_KEYS_JSON_FILE": str(secret_path)},
+                clear=True,
+            ):
+                settings = Settings()
+
+        self.assertEqual(settings.api_keys_json.reveal(), "from-secret-file")
+        self.assertNotIn("api-keys.json", repr(settings.api_keys_json))
+
+    def test_secret_environment_source_remains_backward_compatible(self) -> None:
+        with patch.dict(os.environ, {"ZHIPU_API_KEY": "from-environment"}, clear=True):
+            settings = Settings()
+
+        self.assertEqual(settings.api_key.reveal(), "from-environment")
+
+    def test_secret_file_source_rejects_ambiguous_or_unsafe_configuration(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            secret_path = Path(directory) / "provider-key"
+            secret_path.write_text("from-secret-file", encoding="utf-8")
+            with patch.dict(
+                os.environ,
+                {
+                    "ZHIPU_API_KEY": "environment-value",
+                    "ZHIPU_API_KEY_FILE": str(secret_path),
+                },
+                clear=True,
+            ), self.assertRaisesRegex(ValueError, "cannot both be set"):
+                Settings()
+
+            with patch.dict(
+                os.environ,
+                {"ZHIPU_API_KEY_FILE": "relative-secret"},
+                clear=True,
+            ), self.assertRaisesRegex(ValueError, "absolute path"):
+                Settings()
+
+            with patch.dict(
+                os.environ,
+                {"ZHIPU_API_KEY_FILE": str(Path(directory) / "missing")},
+                clear=True,
+            ), self.assertRaisesRegex(ValueError, "regular non-symbolic file"):
+                Settings()
+
+            oversized_path = Path(directory) / "oversized"
+            oversized_path.write_bytes(b"x" * (64 * 1024 + 1))
+            with patch.dict(
+                os.environ,
+                {"ZHIPU_API_KEY_FILE": str(oversized_path)},
+                clear=True,
+            ), self.assertRaisesRegex(ValueError, "invalid content"):
+                Settings()
+
+    def test_compose_secret_overlay_removes_plaintext_credential_values(self) -> None:
+        overlay = (Path(__file__).resolve().parents[1] / "compose.secrets.example.yaml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("RAG_API_KEYS_JSON: \"\"", overlay)
+        self.assertIn("RAG_API_KEYS_JSON_FILE: /run/secrets/rag_api_keys_json", overlay)
+        self.assertIn("ZHIPU_API_KEY: \"\"", overlay)
+        self.assertIn("ZHIPU_API_KEY_FILE: /run/secrets/zhipu_api_key", overlay)
+        self.assertIn("file: ./secrets/rag_api_keys_json", overlay)
+        self.assertIn("file: ./secrets/zhipu_api_key", overlay)
 
     def test_defaults_are_valid_and_privacy_preserving(self) -> None:
         with patch.dict(os.environ, {}, clear=True):

@@ -29,6 +29,44 @@ class SecretValue:
     __str__ = __repr__
 
 
+_MAX_SECRET_FILE_BYTES = 64 * 1024
+
+
+def _env_secret(name: str) -> SecretValue:
+    """Read one secret from an environment variable or an explicit secret file.
+
+    ``<NAME>_FILE`` is intended for container secret mounts.  Supplying both
+    sources is rejected instead of silently picking one, so production startup
+    cannot accidentally fall back to an outdated environment value.
+    """
+
+    environment_value = os.getenv(name)
+    file_value = os.getenv(f"{name}_FILE")
+    has_environment_value = bool(environment_value and environment_value.strip())
+    has_file_value = bool(file_value and file_value.strip())
+    if has_environment_value and has_file_value:
+        raise ValueError(f"{name} and {name}_FILE cannot both be set")
+    if not has_file_value:
+        return SecretValue(environment_value)
+
+    assert file_value is not None
+    try:
+        secret_path = Path(file_value)
+        if not secret_path.is_absolute():
+            raise ValueError(f"{name}_FILE must be an absolute path")
+        if secret_path.is_symlink() or not secret_path.is_file():
+            raise ValueError(f"{name}_FILE must name a regular non-symbolic file")
+    except OSError as error:
+        raise ValueError(f"{name}_FILE must name a regular non-symbolic file") from error
+    try:
+        contents = secret_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise ValueError(f"{name}_FILE cannot be read") from error
+    if "\x00" in contents or len(contents.encode("utf-8")) > _MAX_SECRET_FILE_BYTES:
+        raise ValueError(f"{name}_FILE has invalid content")
+    return SecretValue(contents)
+
+
 def _env_bool(name: str, default: bool) -> bool:
     value = os.getenv(name)
     if value is None:
@@ -70,9 +108,7 @@ class Settings:
         )
     )
     persist_data: bool = field(default_factory=lambda: _env_bool("RAG_PERSIST_DATA", False))
-    api_keys_json: SecretValue = field(
-        default_factory=lambda: SecretValue(os.getenv("RAG_API_KEYS_JSON"))
-    )
+    api_keys_json: SecretValue = field(default_factory=lambda: _env_secret("RAG_API_KEYS_JSON"))
     api_docs_enabled: bool = field(
         default_factory=lambda: _env_bool("RAG_API_DOCS_ENABLED", True)
     )
@@ -82,7 +118,7 @@ class Settings:
             "RAG_PRODUCT_TAGLINE", "Evidence workspace"
         )
     )
-    api_key: SecretValue = field(default_factory=lambda: SecretValue(os.getenv("ZHIPU_API_KEY")))
+    api_key: SecretValue = field(default_factory=lambda: _env_secret("ZHIPU_API_KEY"))
     chat_model: str = field(default_factory=lambda: os.getenv("ZHIPU_MODEL", "glm-5.2"))
     chat_url: str = field(
         default_factory=lambda: os.getenv(

@@ -48,3 +48,15 @@
 7. 部署时只使用 Release 中记录的 `image@sha256:...`；验证镜像签名、provenance、
    就绪端点、认证和备份恢复。出现问题时回滚到前一已验证 digest，保留失败版本的
    工件和非敏感诊断供复盘。
+
+## 无副作用发布演练
+
+在首个稳定 tag 之前，以及修改 Docker、锁文件、发布输入或 GitHub Actions 后，从 Actions
+页面手动运行 `release-rehearsal`。该工作流使用与发布相同的锁定运行时、OpenAPI 快照、wheel、
+SBOM 和 release manifest 校验，构建本地候选镜像并验证镜像 revision、readiness 与 API Key
+认证。
+
+它没有 `packages: write`、attestation 或 GitHub Release 权限，且 Docker 构建明确为
+`push: false`，因此不会推送镜像、创建 tag、签名或发布制品。演练成功只能证明发布前输入和
+容器启动路径可用；正式发布仍必须遵循上一节，稳定版本与 tag 的精确匹配由
+`scripts/verify_release.py` 强制验证。
