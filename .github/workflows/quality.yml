@@ -329,6 +329,70 @@ jobs:
           docker volume rm rag-platform-restore-${{ github.run_id }}-${{ github.run_attempt }} || true
           docker compose -p rag-platform-ci down --volumes --remove-orphans
 
+  secret-source-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Create isolated Compose secret fixture
+        shell: bash
+        run: |
+          mkdir -p secrets
+          printf '%s' '{"compose-secret-key-0123456789abcdef":{"subject":"secret-ci","tenant_id":"secret-ci","roles":["reader","writer","operator"]}}' > secrets/rag_api_keys_json
+          : > secrets/zhipu_api_key
+          chmod 0444 secrets/rag_api_keys_json secrets/zhipu_api_key
+          cat > .env <<'EOF'
+          RAG_PERSIST_DATA=true
+          RAG_STORAGE_ROOT=/data
+          RAG_PRODUCT_NAME=RAG Platform secret CI
+          RAG_PRODUCT_TAGLINE=Compose secret mount test
+          RAG_API_KEYS_JSON={"plaintext-key-must-not-work-0123456789":{"subject":"plaintext","tenant_id":"plaintext","roles":["reader"]}}
+          ZHIPU_API_KEY=your_placeholder_provider_key
+          RAG_IMAGE_TAG=secret-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          RAG_SOURCE_REVISION=${{ github.sha }}
+          RAG_DATA_VOLUME=rag-platform-secret-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          RAG_BIND_ADDRESS=127.0.0.1
+          RAG_PUBLISHED_PORT=8014
+          EOF
+          docker compose -f compose.yaml -f compose.secrets.example.yaml -p rag-platform-secret-ci config --quiet
+      - name: Build and start with mounted secret files
+        shell: bash
+        run: |
+          docker compose -f compose.yaml -f compose.secrets.example.yaml -p rag-platform-secret-ci build api
+          docker compose -f compose.yaml -f compose.secrets.example.yaml -p rag-platform-secret-ci up -d
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent --show-error http://127.0.0.1:8014/health/ready; then
+              break
+            fi
+            if [ "$attempt" = 45 ]; then
+              exit 1
+            fi
+            sleep 2
+          done
+      - name: Verify mounted API key wins over plaintext environment value
+        shell: bash
+        run: |
+          curl --fail --silent --show-error \
+            -H 'X-API-Key: compose-secret-key-0123456789abcdef' \
+            http://127.0.0.1:8014/v1/knowledge-bases
+          status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            -H 'X-API-Key: plaintext-key-must-not-work-0123456789' \
+            http://127.0.0.1:8014/v1/knowledge-bases)"
+          test "$status" = "401"
+      - name: Show Compose diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          docker compose -f compose.yaml -f compose.secrets.example.yaml -p rag-platform-secret-ci ps || true
+          docker compose -f compose.yaml -f compose.secrets.example.yaml -p rag-platform-secret-ci logs --tail=300 api || true
+      - name: Remove CI secret fixture and volume
+        if: always()
+        shell: bash
+        run: |
+          docker compose -f compose.yaml -f compose.secrets.example.yaml -p rag-platform-secret-ci down --volumes --remove-orphans
+          docker volume rm rag-platform-secret-ci-${{ github.run_id }}-${{ github.run_attempt }} || true
+          rm -rf secrets .env
+
   quality-gate:
     if: always()
     needs:
@@ -342,6 +406,7 @@ jobs:
       - release-manifest
       - recovery-and-durability
       - container-smoke
+      - secret-source-smoke
     runs-on: ubuntu-latest
     steps:
       - name: Require every quality job to succeed
@@ -357,3 +422,4 @@ jobs:
           test "${{ needs.release-manifest.result }}" = "success"
           test "${{ needs.recovery-and-durability.result }}" = "success"
           test "${{ needs.container-smoke.result }}" = "success"
+          test "${{ needs.secret-source-smoke.result }}" = "success"
