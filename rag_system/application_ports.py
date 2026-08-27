@@ -15,7 +15,7 @@ from rag_system.knowledge_base_contracts import (
 from rag_system.domain import AnswerRequest, AnswerResult, IndexRef
 from rag_system.idempotency import IdempotencyReservation
 from rag_system.ingestion import IngestionResult
-from rag_system.job_contracts import CancellationToken, JobId, JobSnapshot
+from rag_system.job_contracts import CancellationToken, JobId, JobRuntimeSnapshot, JobSnapshot
 from rag_system.ports import Retriever
 from rag_system.tenancy import Principal
 
@@ -124,6 +124,8 @@ class JobExecutor(Protocol):
     def get(self, tenant_id: str, job_id: JobId | str) -> JobSnapshot: ...
 
     def cancel(self, tenant_id: str, job_id: JobId | str) -> JobSnapshot: ...
+
+    def operational_snapshot(self) -> JobRuntimeSnapshot: ...
 
     def shutdown(self, *, wait: bool = True, cancel_pending: bool = True) -> None: ...
 

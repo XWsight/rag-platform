@@ -566,6 +566,9 @@ class OperationalMetrics:
     retrieval_routes_total: Counter
     index_tasks_total: Counter
     external_call_errors_total: Counter
+    job_queue_depth: Gauge
+    job_active_count: Gauge
+    job_oldest_active_seconds: Gauge
 
 
 def create_operational_metrics(namespace: str = "rag") -> OperationalMetrics:
@@ -625,6 +628,18 @@ def create_operational_metrics(namespace: str = "rag") -> OperationalMetrics:
         },
         max_series=96,
     )
+    job_queue_depth = registry.gauge(
+        f"{prefix}_job_queue_depth",
+        "Current number of accepted jobs waiting for a worker.",
+    )
+    job_active_count = registry.gauge(
+        f"{prefix}_job_active_count",
+        "Current number of queued, running, or cancelling jobs.",
+    )
+    job_oldest_active_seconds = registry.gauge(
+        f"{prefix}_job_oldest_active_seconds",
+        "Age in seconds of the oldest non-terminal job.",
+    )
     return OperationalMetrics(
         registry=registry,
         requests_total=requests,
@@ -632,6 +647,9 @@ def create_operational_metrics(namespace: str = "rag") -> OperationalMetrics:
         retrieval_routes_total=route_counter,
         index_tasks_total=index_tasks,
         external_call_errors_total=external_errors,
+        job_queue_depth=job_queue_depth,
+        job_active_count=job_active_count,
+        job_oldest_active_seconds=job_oldest_active_seconds,
     )
 
 

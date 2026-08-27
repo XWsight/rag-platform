@@ -156,6 +156,15 @@ class PlatformTests(unittest.TestCase):
         self.assertEqual(record.status, KnowledgeBaseStatus.READY)
         return record
 
+    def test_refresh_operational_metrics_exports_aggregate_job_state(self) -> None:
+        self.platform.refresh_operational_metrics()
+
+        rendered = self.platform.metrics.registry.render_prometheus()
+
+        self.assertIn("rag_job_queue_depth 0", rendered)
+        self.assertIn("rag_job_active_count 0", rendered)
+        self.assertIn("rag_job_oldest_active_seconds 0", rendered)
+
     def _wait_for_job(self, job_id: str):
         return self._wait_for_job_on(self.platform, job_id)
 

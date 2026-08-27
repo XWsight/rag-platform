@@ -283,6 +283,9 @@ def register_resource_routes(
     ) -> Response:
         request.state.operation = "health"
         consume(request, principal)
+        refresh_metrics = getattr(platform, "refresh_operational_metrics", None)
+        if callable(refresh_metrics):
+            refresh_metrics()
         payload = platform.metrics.registry.render_prometheus()
         return Response(payload, headers={"Content-Type": _PROMETHEUS_CONTENT_TYPE})
 
