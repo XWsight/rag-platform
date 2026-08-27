@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import io
 from unittest.mock import Mock
 import subprocess
 import tempfile
@@ -8,6 +9,7 @@ import unittest
 from datetime import date
 from pathlib import Path
 from unittest.mock import patch
+from contextlib import redirect_stderr
 
 from scripts.audit_dependencies import (
     AuditFinding,
@@ -151,6 +153,21 @@ class DependencyAuditPolicyTests(unittest.TestCase):
             )
             self.assertEqual(process.communicate.call_count, 2)
             self.assertEqual(process.communicate.call_args_list[0].kwargs["timeout"], 47)
+
+    def test_missing_audit_module_is_reported_as_a_setup_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            policy, requirements = self._write_fixture(directory)
+            exceptions = load_policy(policy, requirements, today=date(2026, 8, 11))
+            process = Mock()
+            process.returncode = 1
+            process.communicate.return_value = ("", "No module named pip_audit\n")
+            output = io.StringIO()
+            with patch("scripts.audit_dependencies._start_audit_process", return_value=process), redirect_stderr(
+                output
+            ):
+                self.assertEqual(run_audit(requirements, exceptions), 2)
+
+        self.assertIn("No module named pip_audit", output.getvalue())
 
 
 if __name__ == "__main__":

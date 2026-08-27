@@ -351,6 +351,15 @@ def run_audit(
         if stderr:
             print(stderr, file=sys.stderr, end="")
         return process.returncode or 2
+    if process.returncode == 1 and not stdout.strip():
+        # pip-audit uses exit code 1 for findings, but Python also uses it when
+        # the module cannot be imported. Do not mislabel a missing auditor as
+        # malformed audit output: the caller needs an actionable setup failure.
+        if stderr:
+            print(stderr, file=sys.stderr, end="")
+        else:
+            print("dependency audit tool did not produce a JSON report", file=sys.stderr)
+        return 2
     try:
         findings = parse_report(stdout)
     except AuditPolicyError as error:
