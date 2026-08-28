@@ -11,6 +11,7 @@ from rag_system.application_contracts import (
     APPLICATION_CONFIGURATION_SCHEMA_VERSION,
     Application,
     ApplicationAuditEventType,
+    ApplicationDraft,
     ApplicationKind,
     ApplicationRevision,
     ApplicationStatus,
@@ -27,6 +28,9 @@ from rag_system.application_contracts import (
 from rag_system.application_ports import ApplicationRepository, KnowledgeBaseRepository
 from rag_system.knowledge_base_contracts import KnowledgeBaseStatus
 from rag_system.tenancy import Principal
+
+
+_UNSET = object()
 
 
 class ApplicationServiceError(Exception):
@@ -163,6 +167,69 @@ class ApplicationService:
             principal, application.application_id, event, updated_at=now
         )
 
+    def get_draft(self, principal: Principal, application_id: str) -> ApplicationDraft:
+        _require_writer(principal)
+        return self._repository.get_draft(principal, application_id)
+
+    def update_knowledge_draft(
+        self,
+        principal: Principal,
+        application_id: str,
+        configuration: KnowledgeChatConfiguration,
+        *,
+        expected_version: int,
+        change_summary: str,
+    ) -> ApplicationDraft:
+        _require_writer(principal)
+        if isinstance(expected_version, bool) or not isinstance(expected_version, int):
+            raise ApplicationServiceValidationError("expected draft version must be an integer.")
+        application = self._repository.get_application(principal, application_id)
+        if application.status is ApplicationStatus.ARCHIVED:
+            raise ApplicationServiceValidationError("Archived applications cannot update drafts.")
+        self._verify_ready_knowledge_bases(principal, configuration.knowledge_base_ids)
+        now = self._now()
+        draft = ApplicationDraft(
+            application_id=application.application_id,
+            version=expected_version + 1,
+            configuration=configuration,
+            updated_at=now,
+            updated_by=principal.subject,
+            change_summary=change_summary,
+        )
+        event = AuditEvent(
+            audit_event_id=_new_id("audit"),
+            tenant_id=principal.tenant_id,
+            event_type=ApplicationAuditEventType.DRAFT_UPDATED,
+            occurred_at=now,
+            actor=principal.subject,
+            summary="Updated an application draft.",
+            project_id=application.project_id,
+            application_id=application.application_id,
+        )
+        return self._repository.update_draft(
+            principal, draft, event, expected_version=expected_version
+        )
+
+    def create_revision_from_draft(
+        self,
+        principal: Principal,
+        application_id: str,
+        *,
+        expected_version: int,
+    ) -> ApplicationRevision:
+        _require_writer(principal)
+        draft = self._repository.get_draft(principal, application_id)
+        if draft.version != expected_version:
+            raise ApplicationServiceValidationError("Application draft has changed.")
+        if draft.configuration is None:
+            raise ApplicationServiceValidationError("Application draft has not been configured.")
+        return self.create_knowledge_revision(
+            principal,
+            application_id,
+            draft.configuration,
+            change_summary=draft.change_summary,
+        )
+
     def create_knowledge_revision(
         self,
         principal: Principal,
@@ -242,6 +309,7 @@ class ApplicationService:
         revision_id: str,
         *,
         environment: DeploymentEnvironment = DeploymentEnvironment.PRODUCTION,
+        expected_active_revision_id: str | None | object = _UNSET,
     ) -> PublishedApplication:
         _require_operator(principal)
         if environment is not DeploymentEnvironment.PRODUCTION:
@@ -273,13 +341,32 @@ class ApplicationService:
             application_id=application.application_id,
             revision_id=revision.revision_id,
         )
-        active = self._repository.publish(principal, deployment, event, updated_at=now)
+        if expected_active_revision_id is _UNSET:
+            active = self._repository.publish(principal, deployment, event, updated_at=now)
+        else:
+            active = self._repository.publish(
+                principal,
+                deployment,
+                event,
+                updated_at=now,
+                expected_active_revision_id=expected_active_revision_id,
+            )
         return PublishedApplication(application=active, deployment=deployment)
 
     def rollback(
-        self, principal: Principal, application_id: str, revision_id: str
+        self,
+        principal: Principal,
+        application_id: str,
+        revision_id: str,
+        *,
+        expected_active_revision_id: str | None | object = _UNSET,
     ) -> PublishedApplication:
-        return self.publish(principal, application_id, revision_id)
+        return self.publish(
+            principal,
+            application_id,
+            revision_id,
+            expected_active_revision_id=expected_active_revision_id,
+        )
 
     def _verify_ready_knowledge_bases(
         self, principal: Principal, resource_ids: Sequence[str]

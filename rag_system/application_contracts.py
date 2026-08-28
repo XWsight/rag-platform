@@ -67,12 +67,14 @@ class RetrievalProfile(StrEnum):
     """Named retrieval contracts supported by the current application runtime."""
 
     DEFAULT = "default"
+    FOCUSED = "focused"
 
 
 class ApplicationAuditEventType(StrEnum):
     PROJECT_CREATED = "project_created"
     APPLICATION_CREATED = "application_created"
     APPLICATION_ARCHIVED = "application_archived"
+    DRAFT_UPDATED = "draft_updated"
     REVISION_CREATED = "revision_created"
     DEPLOYMENT_CREATED = "deployment_created"
 
@@ -220,6 +222,35 @@ class ApplicationRevision:
             raise ApplicationValidationError("created_at must be finite and non-negative.")
         object.__setattr__(self, "created_by", validate_subject(self.created_by))
         object.__setattr__(self, "change_summary", validate_change_summary(self.change_summary))
+
+
+@dataclass(frozen=True, slots=True)
+class ApplicationDraft:
+    """The one mutable candidate configuration for an application."""
+
+    application_id: str
+    version: int
+    configuration: KnowledgeChatConfiguration | None
+    updated_at: float
+    updated_by: str
+    change_summary: str = ""
+
+    def __post_init__(self) -> None:
+        validate_application_id(self.application_id)
+        if isinstance(self.version, bool) or not isinstance(self.version, int) or self.version < 0:
+            raise ApplicationValidationError("draft version must be a non-negative integer.")
+        if self.configuration is not None and not isinstance(
+            self.configuration, KnowledgeChatConfiguration
+        ):
+            raise ApplicationValidationError("draft configuration must be a KnowledgeChatConfiguration.")
+        if not is_valid_timestamp(self.updated_at):
+            raise ApplicationValidationError("updated_at must be finite and non-negative.")
+        object.__setattr__(self, "updated_by", validate_subject(self.updated_by))
+        if self.configuration is None:
+            if self.change_summary:
+                raise ApplicationValidationError("an empty draft cannot have a change summary.")
+        else:
+            object.__setattr__(self, "change_summary", validate_change_summary(self.change_summary))
 
 
 @dataclass(frozen=True, slots=True)
@@ -415,6 +446,7 @@ __all__ = [
     "Application",
     "ApplicationAuditEventType",
     "ApplicationContractError",
+    "ApplicationDraft",
     "ApplicationKind",
     "ApplicationRevision",
     "ApplicationStatus",

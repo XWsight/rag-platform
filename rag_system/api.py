@@ -28,7 +28,7 @@ from rag_system.api_request_context import install_request_context_middleware, o
 from rag_system.api_resource_routes import register_resource_routes
 from rag_system.api_security import build_api_security_dependencies
 from rag_system.application import RagApplication
-from rag_system.application_runtime import KnowledgeApplicationRuntime
+from rag_system.application_runtime import ApplicationRuntime
 from rag_system.application_service import ApplicationService
 from rag_system.observability import JsonEventLogger
 from rag_system.rate_limit import TokenBucketRateLimiter
@@ -54,7 +54,7 @@ def create_app(
     readiness: ReadinessCheck | bool | None = None,
     shutdown: Callable[[], None] | None = None,
     close_on_shutdown: bool = True,
-    application_runtime: KnowledgeApplicationRuntime | None = None,
+    application_runtime: ApplicationRuntime | None = None,
     application_service: ApplicationService | None = None,
 ) -> FastAPI:
     """Build an isolated FastAPI application from explicit dependencies."""

@@ -8,6 +8,7 @@ from typing import Any, BinaryIO, Protocol
 
 from rag_system.application_contracts import (
     Application,
+    ApplicationDraft,
     ApplicationRevision,
     AuditEvent,
     Deployment,
@@ -49,6 +50,17 @@ class ApplicationRepository(Protocol):
         self, principal: Principal, application_id: str, audit_event: AuditEvent, *, updated_at: float
     ) -> Application: ...
 
+    def get_draft(self, principal: Principal, application_id: str) -> ApplicationDraft: ...
+
+    def update_draft(
+        self,
+        principal: Principal,
+        draft: ApplicationDraft,
+        audit_event: AuditEvent,
+        *,
+        expected_version: int,
+    ) -> ApplicationDraft: ...
+
     def create_revision(
         self,
         principal: Principal,
@@ -77,6 +89,7 @@ class ApplicationRepository(Protocol):
         audit_event: AuditEvent,
         *,
         updated_at: float,
+        expected_active_revision_id: str | None | object = ...,
     ) -> Application: ...
 
     def get_deployment(self, principal: Principal, deployment_id: str) -> Deployment: ...

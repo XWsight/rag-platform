@@ -15,6 +15,7 @@ from rag_system.application_contracts import (
     Application,
     ApplicationAuditEventType,
     ApplicationContractError,
+    ApplicationDraft,
     ApplicationKind,
     ApplicationRevision,
     ApplicationStatus,
@@ -39,9 +40,10 @@ from rag_system.sqlite_support import SqliteDatabase
 from rag_system.tenancy import Principal, TenantId
 
 
-_SCHEMA_VERSION = 4
+_SCHEMA_VERSION = 5
 _MAX_LIST_LIMIT = 100
 _MAX_CONFIGURATION_BYTES = 64 * 1024
+_UNSET = object()
 
 
 class ApplicationStoreError(ApplicationContractError):
@@ -71,6 +73,16 @@ class ApplicationUnavailableError(ApplicationStoreError):
 class ApplicationRevisionUnavailableError(ApplicationStoreError):
     def __init__(self) -> None:
         super().__init__("Application revision is unavailable.")
+
+
+class ApplicationDraftConflictError(ApplicationStoreError):
+    def __init__(self) -> None:
+        super().__init__("Application draft has changed.")
+
+
+class ApplicationPublishConflictError(ApplicationStoreError):
+    def __init__(self) -> None:
+        super().__init__("Application publication has changed.")
 
 
 class DeploymentUnavailableError(ApplicationStoreError):
@@ -177,6 +189,12 @@ class ApplicationStore:
                         application.updated_at,
                     ),
                 )
+                connection.execute(
+                    """INSERT INTO application_drafts (
+                    application_id, version, configuration_json, updated_at, updated_by, change_summary
+                    ) VALUES (?, 0, NULL, ?, ?, '')""",
+                    (application.application_id, application.updated_at, principal.subject),
+                )
             except sqlite3.IntegrityError as error:
                 raise ApplicationStoreStorageError() from error
         return application
@@ -240,6 +258,64 @@ class ApplicationStore:
         if row is None:
             raise ApplicationUnavailableError()
         return _application_from_row(row)
+
+    def get_draft(self, principal: Principal, application_id: str) -> ApplicationDraft:
+        tenant_id = _principal_tenant(principal)
+        clean_id = _safe_application_lookup_id(application_id)
+        with self._read_connection() as connection:
+            self._require_application(connection, tenant_id, clean_id)
+            row = connection.execute(
+                "SELECT * FROM application_drafts WHERE application_id = ?", (clean_id,)
+            ).fetchone()
+        if row is None:
+            raise ApplicationStoreSchemaError()
+        return _draft_from_row(row)
+
+    def update_draft(
+        self,
+        principal: Principal,
+        draft: ApplicationDraft,
+        audit_event: AuditEvent,
+        *,
+        expected_version: int,
+    ) -> ApplicationDraft:
+        tenant_id = _principal_tenant(principal)
+        if isinstance(expected_version, bool) or not isinstance(expected_version, int):
+            raise ApplicationValidationError("expected draft version must be an integer.")
+        if audit_event.event_type is not ApplicationAuditEventType.DRAFT_UPDATED:
+            raise ApplicationValidationError("Draft updates require a draft-updated audit event.")
+        if draft.configuration is None:
+            raise ApplicationValidationError("Draft updates require a configuration.")
+        encoded = _encode_configuration(draft.configuration)
+        with self._write_lock, self._write_transaction() as connection:
+            application = self._require_application(connection, tenant_id, draft.application_id)
+            if application.status is not ApplicationStatus.ACTIVE:
+                raise ApplicationValidationError("Archived applications cannot update drafts.")
+            result = connection.execute(
+                """UPDATE application_drafts
+                SET version = ?, configuration_json = ?, updated_at = ?, updated_by = ?, change_summary = ?
+                WHERE application_id = ? AND version = ?""",
+                (
+                    draft.version,
+                    encoded,
+                    draft.updated_at,
+                    draft.updated_by,
+                    draft.change_summary,
+                    draft.application_id,
+                    expected_version,
+                ),
+            )
+            if result.rowcount != 1:
+                raise ApplicationDraftConflictError()
+            if audit_event.tenant_id != tenant_id or audit_event.application_id != draft.application_id:
+                raise ApplicationUnavailableError()
+            self._insert_audit_event(connection, audit_event)
+            row = connection.execute(
+                "SELECT * FROM application_drafts WHERE application_id = ?", (draft.application_id,)
+            ).fetchone()
+        if row is None:
+            raise ApplicationStoreSchemaError()
+        return _draft_from_row(row)
 
     def create_revision(
         self,
@@ -390,6 +466,7 @@ class ApplicationStore:
         audit_event: AuditEvent,
         *,
         updated_at: float,
+        expected_active_revision_id: str | None | object = _UNSET,
     ) -> Application:
         """Atomically activate a revision, retain its deployment, and audit it."""
 
@@ -400,6 +477,11 @@ class ApplicationStore:
             application = self._require_application(connection, tenant_id, deployment.application_id)
             if application.status is not ApplicationStatus.ACTIVE:
                 raise ApplicationValidationError("Archived applications cannot be published.")
+            if (
+                expected_active_revision_id is not _UNSET
+                and application.active_revision_id != expected_active_revision_id
+            ):
+                raise ApplicationPublishConflictError()
             if self._select_revision(
                 connection, tenant_id, deployment.application_id, deployment.revision_id
             ) is None:
@@ -508,7 +590,14 @@ class ApplicationStore:
                 connection.executescript(_CREATE_SCHEMA_SQL)
                 connection.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             elif version == 1:
-                self._validate_schema(connection)
+                self._validate_schema(
+                    connection,
+                    expected_columns={
+                        table: columns
+                        for table, columns in _EXPECTED_COLUMNS.items()
+                        if table != "application_drafts"
+                    },
+                )
                 self._migrate_v1_to_v2(connection)
                 version = 2
             if version == 2:
@@ -516,6 +605,9 @@ class ApplicationStore:
                 version = 3
             if version == 3:
                 self._migrate_v3_to_v4(connection)
+                version = 4
+            if version == 4:
+                self._migrate_v4_to_v5(connection)
             elif version not in {0, _SCHEMA_VERSION}:
                 raise ApplicationStoreSchemaError()
             self._validate_schema(connection)
@@ -562,14 +654,41 @@ class ApplicationStore:
                 "UPDATE application_revisions SET configuration_json = ? WHERE revision_id = ?",
                 (_encode_configuration(configuration), row["revision_id"]),
             )
+        connection.execute("PRAGMA user_version = 4")
+
+    @staticmethod
+    def _migrate_v4_to_v5(connection: sqlite3.Connection) -> None:
+        connection.execute("ALTER TABLE application_audit_events RENAME TO application_audit_events_v4")
+        connection.execute(_CREATE_AUDIT_EVENTS_SQL)
+        connection.execute(
+            """INSERT INTO application_audit_events SELECT audit_event_id, tenant_id, event_type,
+            occurred_at, actor, summary, project_id, application_id, revision_id
+            FROM application_audit_events_v4"""
+        )
+        connection.execute("DROP TABLE application_audit_events_v4")
+        connection.execute(
+            "CREATE INDEX idx_application_audit_events_tenant_occurred ON "
+            "application_audit_events (tenant_id, occurred_at DESC, audit_event_id DESC)"
+        )
+        connection.execute(_CREATE_DRAFTS_SQL)
+        connection.execute(
+            """INSERT INTO application_drafts (
+            application_id, version, configuration_json, updated_at, updated_by, change_summary
+            ) SELECT application_id, 0, NULL, updated_at, 'migration', '' FROM applications"""
+        )
         connection.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
 
     @staticmethod
-    def _validate_schema(connection: sqlite3.Connection) -> None:
+    def _validate_schema(
+        connection: sqlite3.Connection,
+        *,
+        expected_columns: dict[str, tuple[tuple[str, str, int, int], ...]] | None = None,
+    ) -> None:
+        expected = _EXPECTED_COLUMNS if expected_columns is None else expected_columns
         tables = _existing_schema_tables(connection)
-        if tables != frozenset(_EXPECTED_COLUMNS):
+        if tables != frozenset(expected):
             raise ApplicationStoreSchemaError()
-        for table, expected_table_columns in _EXPECTED_COLUMNS.items():
+        for table, expected_table_columns in expected.items():
             actual_table_columns = tuple(
                 (row["name"], row["type"].upper(), int(row["notnull"]), int(row["pk"]))
                 for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
@@ -578,7 +697,7 @@ class ApplicationStore:
                 raise ApplicationStoreSchemaError()
         indexes = {
             str(row["name"]): (int(row["unique"]), int(row["partial"]))
-            for table in _EXPECTED_COLUMNS
+            for table in expected
             for row in connection.execute(f"PRAGMA index_list({table})").fetchall()
             if str(row["name"]).startswith("idx_")
         }
@@ -688,7 +807,7 @@ CREATE TABLE application_audit_events (
     audit_event_id TEXT PRIMARY KEY NOT NULL,
     tenant_id TEXT NOT NULL,
     event_type TEXT NOT NULL CHECK (event_type IN (
-        'project_created', 'application_created', 'application_archived',
+        'project_created', 'application_created', 'application_archived', 'draft_updated',
         'revision_created', 'deployment_created'
     )),
     occurred_at REAL NOT NULL CHECK (occurred_at >= 0),
@@ -697,6 +816,18 @@ CREATE TABLE application_audit_events (
     project_id TEXT,
     application_id TEXT,
     revision_id TEXT
+)
+"""
+
+
+_CREATE_DRAFTS_SQL = """
+CREATE TABLE application_drafts (
+    application_id TEXT PRIMARY KEY NOT NULL REFERENCES applications(application_id),
+    version INTEGER NOT NULL CHECK (version >= 0),
+    configuration_json TEXT,
+    updated_at REAL NOT NULL CHECK (updated_at >= 0),
+    updated_by TEXT NOT NULL,
+    change_summary TEXT NOT NULL
 )
 """
 
@@ -732,6 +863,14 @@ CREATE TABLE application_revisions (
     change_summary TEXT NOT NULL,
     UNIQUE (application_id, revision_number)
 );
+CREATE TABLE application_drafts (
+    application_id TEXT PRIMARY KEY NOT NULL REFERENCES applications(application_id),
+    version INTEGER NOT NULL CHECK (version >= 0),
+    configuration_json TEXT,
+    updated_at REAL NOT NULL CHECK (updated_at >= 0),
+    updated_by TEXT NOT NULL,
+    change_summary TEXT NOT NULL
+);
 CREATE TABLE resource_bindings (
     binding_id TEXT PRIMARY KEY NOT NULL,
     application_id TEXT NOT NULL REFERENCES applications(application_id),
@@ -754,7 +893,7 @@ CREATE TABLE application_audit_events (
     audit_event_id TEXT PRIMARY KEY NOT NULL,
     tenant_id TEXT NOT NULL,
     event_type TEXT NOT NULL CHECK (event_type IN (
-        'project_created', 'application_created', 'application_archived',
+        'project_created', 'application_created', 'application_archived', 'draft_updated',
         'revision_created', 'deployment_created'
     )),
     occurred_at REAL NOT NULL CHECK (occurred_at >= 0),
@@ -794,6 +933,11 @@ _EXPECTED_COLUMNS = {
         ("revision_number", "INTEGER", 1, 0), ("configuration_schema_version", "INTEGER", 1, 0),
         ("configuration_json", "TEXT", 1, 0), ("created_at", "REAL", 1, 0),
         ("created_by", "TEXT", 1, 0), ("change_summary", "TEXT", 1, 0),
+    ),
+    "application_drafts": (
+        ("application_id", "TEXT", 1, 1), ("version", "INTEGER", 1, 0),
+        ("configuration_json", "TEXT", 0, 0), ("updated_at", "REAL", 1, 0),
+        ("updated_by", "TEXT", 1, 0), ("change_summary", "TEXT", 1, 0),
     ),
     "resource_bindings": (
         ("binding_id", "TEXT", 1, 1), ("application_id", "TEXT", 1, 0),
@@ -1100,6 +1244,23 @@ def _revision_from_row(row: sqlite3.Row) -> ApplicationRevision:
         raise ApplicationStoreSchemaError() from error
 
 
+def _draft_from_row(row: sqlite3.Row) -> ApplicationDraft:
+    try:
+        raw_configuration = row["configuration_json"]
+        return ApplicationDraft(
+            application_id=row["application_id"],
+            version=row["version"],
+            configuration=(
+                None if raw_configuration is None else _decode_configuration(raw_configuration)
+            ),
+            updated_at=row["updated_at"],
+            updated_by=row["updated_by"],
+            change_summary=row["change_summary"],
+        )
+    except (ApplicationContractError, KeyError, TypeError, ValueError) as error:
+        raise ApplicationStoreSchemaError() from error
+
+
 def _binding_from_row(row: sqlite3.Row) -> ResourceBinding:
     try:
         return ResourceBinding(
@@ -1145,6 +1306,8 @@ def _existing_schema_tables(connection: sqlite3.Connection) -> frozenset[str]:
 
 
 __all__ = [
+    "ApplicationDraftConflictError",
+    "ApplicationPublishConflictError",
     "ApplicationRevisionUnavailableError",
     "ApplicationStore",
     "ApplicationStoreError",

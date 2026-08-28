@@ -35,6 +35,8 @@ class GroundingAudit:
 def validate_grounded_answer(
     draft: GeneratedAnswer,
     allowed_citation_ids: Sequence[str],
+    *,
+    require_citations: bool = True,
 ) -> GroundingAudit:
     """Validate a complete generated answer against the exact evidence registry.
 
@@ -83,7 +85,9 @@ def validate_grounded_answer(
         if total_characters > MAX_GROUNDED_ANSWER_CHARACTERS:
             raise GroundingContractError("generated answer is too long")
 
-        if not isinstance(claim.citation_ids, tuple) or not claim.citation_ids:
+        if not isinstance(claim.citation_ids, tuple):
+            raise GroundingContractError("claim citation IDs must be an immutable tuple")
+        if require_citations and not claim.citation_ids:
             raise GroundingContractError("every claim must cite evidence")
         if len(claim.citation_ids) != len(set(claim.citation_ids)):
             raise GroundingContractError("claim citation IDs must be unique")

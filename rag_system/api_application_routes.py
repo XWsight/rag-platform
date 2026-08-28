@@ -14,6 +14,9 @@ from rag_system.api_contract import (
     DeploymentCreatePayload,
     DeploymentListResponse,
     DeploymentResponse,
+    DraftResponse,
+    DraftRevisionCreatePayload,
+    DraftUpdatePayload,
     ProjectCreatePayload,
     ProjectListResponse,
     ProjectResponse,
@@ -23,13 +26,19 @@ from rag_system.api_contract import (
     answer_response,
     application_response,
     deployment_response,
+    draft_response,
     project_response,
     revision_response,
 )
 from rag_system.api_responses import context_from_request
 from rag_system.api_security import ApiSecurityDependencies
-from rag_system.application_runtime import KnowledgeApplicationRuntime
-from rag_system.application_contracts import AnswerPolicy, KnowledgeChatConfiguration, SessionPolicy
+from rag_system.application_runtime import ApplicationRuntime
+from rag_system.application_contracts import (
+    AnswerPolicy,
+    KnowledgeChatConfiguration,
+    RetrievalProfile,
+    SessionPolicy,
+)
 from rag_system.application_service import ApplicationService
 from rag_system.config import Settings
 from rag_system.tenancy import Principal
@@ -42,7 +51,7 @@ class ErrorResponses(Protocol):
 def register_application_routes(
     app: FastAPI,
     *,
-    runtime: KnowledgeApplicationRuntime,
+    runtime: ApplicationRuntime,
     service: ApplicationService,
     settings: Settings,
     security: ApiSecurityDependencies,
@@ -144,6 +153,68 @@ def register_application_routes(
         security.consume(request, principal)
         return application_response(service.archive_application(principal, application_id))
 
+    @app.get(
+        "/v1/applications/{application_id}/draft",
+        response_model=DraftResponse,
+        tags=["applications"],
+    )
+    def get_draft(
+        request: Request,
+        principal: Annotated[Principal, Depends(security.writer)],
+        application_id: str,
+    ) -> DraftResponse:
+        request.state.operation = "application_read"
+        security.consume(request, principal)
+        return draft_response(service.get_draft(principal, application_id))
+
+    @app.put(
+        "/v1/applications/{application_id}/draft",
+        response_model=DraftResponse,
+        tags=["applications"],
+    )
+    def update_draft(
+        request: Request,
+        principal: Annotated[Principal, Depends(security.writer)],
+        application_id: str,
+        payload: DraftUpdatePayload,
+    ) -> DraftResponse:
+        request.state.operation = "application_manage"
+        security.consume(request, principal)
+        configuration = KnowledgeChatConfiguration(
+            knowledge_base_ids=tuple(payload.knowledge_base_ids),
+            retrieval_profile=RetrievalProfile(payload.retrieval_profile),
+            answer_policy=AnswerPolicy(**payload.answer_policy.model_dump()),
+            session_policy=SessionPolicy(**payload.session_policy.model_dump()),
+        )
+        return draft_response(
+            service.update_knowledge_draft(
+                principal,
+                application_id,
+                configuration,
+                expected_version=payload.expected_version,
+                change_summary=payload.change_summary,
+            )
+        )
+
+    @app.post(
+        "/v1/applications/{application_id}/draft/revisions",
+        response_model=RevisionResponse,
+        tags=["applications"],
+    )
+    def create_revision_from_draft(
+        request: Request,
+        principal: Annotated[Principal, Depends(security.writer)],
+        application_id: str,
+        payload: DraftRevisionCreatePayload,
+    ) -> RevisionResponse:
+        request.state.operation = "application_manage"
+        security.consume(request, principal)
+        return revision_response(
+            service.create_revision_from_draft(
+                principal, application_id, expected_version=payload.expected_version
+            )
+        )
+
     @app.post(
         "/v1/applications/{application_id}/revisions",
         response_model=RevisionResponse,
@@ -159,7 +230,7 @@ def register_application_routes(
         security.consume(request, principal)
         configuration = KnowledgeChatConfiguration(
             knowledge_base_ids=tuple(payload.knowledge_base_ids),
-            retrieval_profile=payload.retrieval_profile,
+            retrieval_profile=RetrievalProfile(payload.retrieval_profile),
             answer_policy=AnswerPolicy(**payload.answer_policy.model_dump()),
             session_policy=SessionPolicy(**payload.session_policy.model_dump()),
         )
@@ -202,7 +273,12 @@ def register_application_routes(
         request.state.operation = "application_publish"
         security.consume(request, principal)
         return deployment_response(
-            service.publish(principal, application_id, payload.revision_id).deployment
+            service.publish(
+                principal,
+                application_id,
+                payload.revision_id,
+                expected_active_revision_id=payload.expected_active_revision_id,
+            ).deployment
         )
 
     @app.get(

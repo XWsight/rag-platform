@@ -147,6 +147,29 @@ class RagServiceTests(unittest.TestCase):
         self.assertEqual({item.source_name for item in result.citations}, {"alpha.md", "beta.md"})
         self.assertEqual(result.claims[0].citation_ids, ("L1", "L2"))
 
+    def test_optional_citation_policy_allows_an_uncited_generated_claim(self) -> None:
+        chat = FakeChat(GeneratedAnswer((AnswerClaim("Uncited answer.", ()),)))
+        service, _, _ = self.build_service(make_hit(0.9), chat=chat)
+
+        result = service.answer(
+            "idx", AnswerRequest("What is RAG?", "session", True, False, False, False)
+        )
+
+        self.assertEqual(chat.calls, 1)
+        self.assertEqual(result.claims[0].citation_ids, ())
+
+    def test_focused_retrieval_profile_limits_evidence_to_the_top_hit(self) -> None:
+        first = make_hit(0.9)
+        second_chunk = Chunk("second", "doc", "guide.md", "Second evidence", 1, 0, 15)
+        service, _, _ = self.build_service(first)
+        service.index_manager.retriever.hits.append(SearchHit(second_chunk, 0.8, reasons=("dense", "sparse")))
+
+        result = service.answer(
+            "idx", AnswerRequest("What is RAG?", "session", False, False, False, True, "focused")
+        )
+
+        self.assertEqual(len(result.citations), 1)
+
     def test_privacy_switches_prevent_all_network_calls(self) -> None:
         service, chat, web = self.build_service(make_hit(0.9))
         result = service.answer("idx", AnswerRequest("什么是 RAG", "s", False, False))

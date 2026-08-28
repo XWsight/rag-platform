@@ -1,25 +1,27 @@
 # 版本化应用平台
 
 第一阶段提供 `knowledge_chat` 应用内核。租户在 Project 中创建稳定 Application 身份，配置写入不可变
-Revision，Deployment 原子切换生产 Revision；原有 `/v1/knowledge-bases` 和 `/v1/answers` 保持兼容。
+Draft 可编辑并通过版本号进行乐观并发控制；Draft 快照为不可变 Revision，Deployment 原子切换生产 Revision；原有 `/v1/knowledge-bases` 和 `/v1/answers` 保持兼容。
 
 ## 生命周期与权限
 
 | 操作 | API | 角色 | 持久化结果 |
 | --- | --- | --- | --- |
+| 读取/更新 Draft | `GET` / `PUT .../draft` | `writer` | 版本号冲突拒绝、Draft 更新审计 |
+| Draft 快照为 Revision | `POST .../draft/revisions` | `writer` | 不可变配置与资源绑定 |
 | 创建项目/应用/Revision | `POST /v1/projects`、`/v1/applications`、`.../revisions` | `writer` | 审计事件和不可变配置 |
 | 发布或回滚 | `POST .../deployments` | `operator` | 原子写 Deployment、审计事件与 active Revision |
 | 运行 | `POST /v1/apps/{id}/answer` | `reader` | 响应包含 application、Revision 与 trace |
 | 退役 | `DELETE /v1/applications/{id}` | `operator` | 状态变为 archived；保留 Revision、Deployment 与审计历史 |
 
-应用只保存策略和平台资源 ID，不保存 Provider 密钥。知识库绑定在创建 Revision 和发布时必须属于同一
+发布请求必须携带当前 `active_revision_id`（首次发布为 `null`）；陈旧请求返回 `409 application_conflict`，不会静默覆盖其他操作者的发布。应用只保存策略和平台资源 ID，不保存 Provider 密钥。知识库绑定在创建 Revision 和发布时必须属于同一
 租户且为 READY；运行时再次验证。多个知识库会同时租用其索引，按可比较分数确定性融合证据，再执行一次
 路由与生成。应用会话按租户、应用、Revision 和调用方 session 隔离。
 
 ## 数据与迁移
 
-`/data/applications.sqlite3` 独立于 Catalog、jobs 与幂等仓储，使用 WAL、短事务和严格 schema。schema v4
-增加显式 `retrieval_profile=default`；v1 会依次补齐 `allow_cloud=false`、退役审计事件和检索策略，再迁移到 v4。未知版本、表/索引损坏和无版本旧表
+`/data/applications.sqlite3` 独立于 Catalog、jobs 与幂等仓储，使用 WAL、短事务和严格 schema。schema v5
+增加持久化 Draft 与 `retrieval_profile=default|focused`；v1 会依次补齐 `allow_cloud=false`、退役审计事件、检索策略和 Draft，再迁移到 v5。未知版本、表/索引损坏和无版本旧表
 均拒绝启动。升级前必须执行停写全卷快照；旧镜像不能直接打开迁移后的数据库，回滚必须恢复旧镜像和快照。
 
 ## 发布验证与评测
@@ -41,6 +43,6 @@ Revision 和配置 SHA-256；报告不复制密钥或问题之外的部署配置
 ## 运维边界
 
 `/metrics` 中 `operation=application_read|application_manage|application_publish|application_answer` 提供低基数
-应用流量、错误率和延迟信号；绝不以应用、Revision、租户或知识库 ID 作为指标标签。配置与版本身份从
+应用流量、错误率和延迟信号；绝不以应用、Revision、租户或知识库 ID 作为指标标签。`session_policy.ttl_seconds` 在应用运行时强制清理过期上下文；`require_citations` 控制生成回答是否必须逐条引用证据。`focused` 检索策略只保留最高分证据。配置与版本身份从
 Revision/Deployment/Audit 查询，不从高基数监控标签推断。退役不会擦除 SQLite 页或备份；介质级删除仍按
 全卷保留、加密和密钥销毁策略处理。

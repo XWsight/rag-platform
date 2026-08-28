@@ -135,6 +135,29 @@ class KnowledgeApplicationRuntimeTests(unittest.TestCase):
         self.assertEqual(answer.result.trace_id, "multi")
         self.assertEqual(self.rag.multi_requests[0][0], (KB_ONE, KB_TWO))
 
+    def test_session_ttl_clears_expired_application_context_before_answering(self) -> None:
+        now = [0.0]
+        runtime = KnowledgeApplicationRuntime(
+            self.store, self.rag, clock=lambda: now[0]  # type: ignore[arg-type]
+        )
+        application = self.create_application()
+        revision = self.service.create_knowledge_revision(
+            self.principal,
+            application.application_id,
+            KnowledgeChatConfiguration(
+                knowledge_base_ids=(KB_ONE,), session_policy=SessionPolicy(ttl_seconds=60)
+            ),
+            change_summary="Bounded session",
+        )
+        self.service.publish(self.principal, application.application_id, revision.revision_id)
+        runtime.answer(self.principal, application.application_id, question="One", session_id="browser")
+        now[0] = 59.0
+        runtime.answer(self.principal, application.application_id, question="Two", session_id="browser")
+        self.assertEqual(self.rag.cleared, [])
+        now[0] = 119.0
+        runtime.answer(self.principal, application.application_id, question="Three", session_id="browser")
+        self.assertEqual(len(self.rag.cleared), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

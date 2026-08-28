@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import time
+from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import dataclass
+from threading import RLock
+from typing import Protocol
 
 from rag_system.application import RagApplication
 from rag_system.application_contracts import ApplicationStatus, KnowledgeChatConfiguration
@@ -40,12 +45,40 @@ class ApplicationAnswer:
     result: AnswerResult
 
 
+class ApplicationRuntime(Protocol):
+    """Stable runtime port for application-kind adapters."""
+
+    def answer(
+        self,
+        principal: Principal,
+        application_id: str,
+        *,
+        question: str,
+        session_id: str,
+    ) -> ApplicationAnswer: ...
+
+
 class KnowledgeApplicationRuntime:
     """Resolve a deployed knowledge-chat application through the existing RAG facade."""
 
-    def __init__(self, applications: ApplicationRepository, rag: RagApplication) -> None:
+    def __init__(
+        self,
+        applications: ApplicationRepository,
+        rag: RagApplication,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+        max_tracked_sessions: int = 4_096,
+    ) -> None:
+        if not callable(clock):
+            raise TypeError("clock must be callable")
+        if isinstance(max_tracked_sessions, bool) or max_tracked_sessions < 1:
+            raise ValueError("max_tracked_sessions must be positive")
         self._applications = applications
         self._rag = rag
+        self._clock = clock
+        self._max_tracked_sessions = max_tracked_sessions
+        self._session_accessed_at: OrderedDict[str, float] = OrderedDict()
+        self._session_lock = RLock()
 
     def answer(
         self,
@@ -74,7 +107,16 @@ class KnowledgeApplicationRuntime:
             allow_cloud=configuration.answer_policy.allow_cloud,
             allow_web=configuration.answer_policy.allow_web,
             deep_research=configuration.answer_policy.allow_research,
+            require_citations=configuration.answer_policy.require_citations,
+            retrieval_profile=configuration.retrieval_profile.value,
         )
+        if configuration.session_policy.enabled:
+            self._clear_expired_session(
+                principal,
+                resource_ids,
+                runtime_session_id,
+                configuration.session_policy.ttl_seconds,
+            )
         try:
             result = (
                 self._rag.answer(principal, resource_ids[0], request)
@@ -83,15 +125,9 @@ class KnowledgeApplicationRuntime:
             )
         finally:
             if not configuration.session_policy.enabled:
-                try:
-                    if len(resource_ids) == 1:
-                        self._rag.clear_session(principal, resource_ids[0], runtime_session_id)
-                    else:
-                        self._rag.clear_session_across_knowledge_bases(
-                            principal, resource_ids, runtime_session_id
-                        )
-                except Exception:
-                    pass
+                self._clear_bound_session(principal, resource_ids, runtime_session_id)
+            else:
+                self._touch_session(runtime_session_id)
         return ApplicationAnswer(
             application_id=application.application_id,
             revision_id=revision.revision_id,
@@ -120,6 +156,42 @@ class KnowledgeApplicationRuntime:
                 raise ApplicationBoundResourceUnavailableError()
         return configuration.knowledge_base_ids
 
+    def _clear_expired_session(
+        self,
+        principal: Principal,
+        resource_ids: tuple[str, ...],
+        session_id: str,
+        ttl_seconds: int | None,
+    ) -> None:
+        if ttl_seconds is None:
+            return
+        now = float(self._clock())
+        with self._session_lock:
+            last_accessed_at = self._session_accessed_at.pop(session_id, None)
+        if last_accessed_at is not None and now - last_accessed_at >= ttl_seconds:
+            self._clear_bound_session(principal, resource_ids, session_id)
+
+    def _touch_session(self, session_id: str) -> None:
+        now = float(self._clock())
+        with self._session_lock:
+            self._session_accessed_at[session_id] = now
+            self._session_accessed_at.move_to_end(session_id)
+            while len(self._session_accessed_at) > self._max_tracked_sessions:
+                self._session_accessed_at.popitem(last=False)
+
+    def _clear_bound_session(
+        self, principal: Principal, resource_ids: tuple[str, ...], session_id: str
+    ) -> None:
+        try:
+            if len(resource_ids) == 1:
+                self._rag.clear_session(principal, resource_ids[0], session_id)
+            else:
+                self._rag.clear_session_across_knowledge_bases(
+                    principal, resource_ids, session_id
+                )
+        except Exception:
+            return
+
 
 def _runtime_session_id(application_id: str, revision_id: str, session_id: object) -> str:
     if not isinstance(session_id, str) or not session_id.strip() or len(session_id) > 128:
@@ -132,6 +204,7 @@ __all__ = [
     "ApplicationAnswer",
     "ApplicationBoundResourceUnavailableError",
     "ApplicationNotPublishedError",
+    "ApplicationRuntime",
     "ApplicationRuntimeError",
     "ApplicationRuntimeValidationError",
     "KnowledgeApplicationRuntime",
