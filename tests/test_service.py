@@ -41,6 +41,15 @@ class FakeIndexManager:
         yield self.retriever
 
 
+class MultiIndexManager:
+    def __init__(self, retrievers):
+        self.retrievers = retrievers
+
+    @contextmanager
+    def lease(self, index_id: str):
+        yield self.retrievers[index_id]
+
+
 class FakeChat:
     def __init__(self, answer=None, *, available=True, error=None):
         self.response = answer or GeneratedAnswer(
@@ -111,6 +120,32 @@ class RagServiceTests(unittest.TestCase):
         self.assertEqual(chat.calls, 1)
         self.assertEqual(web.calls, 0)
         self.assertEqual(result.citations[0].citation_id, "L1")
+
+    def test_multiple_indexes_are_fused_before_one_answer_is_generated(self) -> None:
+        first_chunk = Chunk("chunk-a", "doc-a", "alpha.md", "Alpha evidence", 0, 0, 14)
+        second_chunk = Chunk("chunk-b", "doc-b", "beta.md", "Beta evidence", 0, 0, 13)
+        manager = MultiIndexManager({
+            "idx-a": FakeRetriever([
+                SearchHit(first_chunk, 0.9, lexical_score=0.8, reasons=("dense", "sparse"))
+            ]),
+            "idx-b": FakeRetriever([
+                SearchHit(second_chunk, 0.8, lexical_score=0.7, reasons=("dense", "sparse"))
+            ]),
+        })
+        chat = FakeChat(
+            GeneratedAnswer((AnswerClaim("Combined answer.", ("L1", "L2")),))
+        )
+        service = RagService(
+            Settings(), manager, chat, FakeWeb()  # type: ignore[arg-type]
+        )
+
+        result = service.answer_many(
+            ("idx-a", "idx-b"), AnswerRequest("Combined?", "session", True, False)
+        )
+
+        self.assertEqual(chat.calls, 1)
+        self.assertEqual({item.source_name for item in result.citations}, {"alpha.md", "beta.md"})
+        self.assertEqual(result.claims[0].citation_ids, ("L1", "L2"))
 
     def test_privacy_switches_prevent_all_network_calls(self) -> None:
         service, chat, web = self.build_service(make_hit(0.9))

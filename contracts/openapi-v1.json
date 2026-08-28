@@ -980,6 +980,14 @@
           "title": "ProjectResponse",
           "type": "object"
         },
+        "RetrievalProfile": {
+          "description": "Named retrieval contracts supported by the current application runtime.",
+          "enum": [
+            "default"
+          ],
+          "title": "RetrievalProfile",
+          "type": "string"
+        },
         "RevisionCreatePayload": {
           "additionalProperties": false,
           "properties": {
@@ -1006,6 +1014,10 @@
               "minItems": 1,
               "title": "Knowledge Base Ids",
               "type": "array"
+            },
+            "retrieval_profile": {
+              "$ref": "#/components/schemas/RetrievalProfile",
+              "default": "default"
             },
             "session_policy": {
               "$ref": "#/components/schemas/SessionPolicyPayload",
@@ -1082,6 +1094,9 @@
               "title": "Knowledge Base Ids",
               "type": "array"
             },
+            "retrieval_profile": {
+              "$ref": "#/components/schemas/RetrievalProfile"
+            },
             "revision_number": {
               "minimum": 1.0,
               "title": "Revision Number",
@@ -1097,6 +1112,7 @@
             "revision_number",
             "configuration_schema_version",
             "knowledge_base_ids",
+            "retrieval_profile",
             "answer_policy",
             "session_policy",
             "created_at",
@@ -1594,6 +1610,54 @@
         }
       },
       "/v1/applications/{application_id}": {
+        "delete": {
+          "operationId": "archive_application_v1_applications__application_id__delete",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "application_id",
+              "required": true,
+              "schema": {
+                "title": "Application Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ApplicationResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "Archive an application while retaining its immutable history",
+          "tags": [
+            "applications"
+          ]
+        },
         "get": {
           "operationId": "get_application_v1_applications__application_id__get",
           "parameters": [

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import threading
+from collections.abc import Sequence
 from dataclasses import replace
 
 from rag_system.application import (
@@ -55,6 +56,46 @@ class KnowledgeBaseAnswerWorkflow:
             return self._answer_unbounded(principal, resource_id, request)
         finally:
             self._slots.release()
+
+    def answer_many(
+        self,
+        principal: Principal,
+        resource_ids: Sequence[str],
+        request: AnswerRequest,
+    ) -> AnswerResult:
+        normalized = tuple(resource_ids)
+        if not normalized or len(normalized) > 32 or len(set(normalized)) != len(normalized):
+            raise PlatformValidationError("resource_ids has an invalid item count")
+        if not self._slots.acquire(blocking=False):
+            raise PlatformUnavailableError("answer capacity is temporarily exhausted")
+        try:
+            index_ids = tuple(self._resolve_index(principal, item) for item in normalized)
+            scoped_request = replace(
+                request,
+                session_id=self._session_id(principal, "\0".join(normalized), request.session_id),
+            )
+            result = self._service.answer_many(index_ids, scoped_request)
+            self._record_external_call_failures(result)
+            return result
+        except KeyError:
+            raise KnowledgeBaseNotReadyError("knowledge base index is being reloaded") from None
+        finally:
+            self._slots.release()
+
+    def clear_session_many(
+        self,
+        principal: Principal,
+        resource_ids: Sequence[str],
+        session_id: str,
+    ) -> bool:
+        normalized = tuple(resource_ids)
+        if not normalized or len(normalized) > 32 or len(set(normalized)) != len(normalized):
+            raise PlatformValidationError("resource_ids has an invalid item count")
+        for resource_id in normalized:
+            self._catalog.get(principal, resource_id)
+        return self._service.clear_session(
+            self._session_id(principal, "\0".join(normalized), session_id)
+        )
 
     def clear_session(
         self,
@@ -118,6 +159,31 @@ class KnowledgeBaseAnswerWorkflow:
             raise KnowledgeBaseNotReadyError(
                 "knowledge base index is being reloaded"
             ) from None
+
+    def _resolve_index(self, principal: Principal, resource_id: str) -> str:
+        record = self._catalog.get(principal, resource_id)
+        if record.status is not KnowledgeBaseStatus.READY or not record.internal_index_id:
+            raise KnowledgeBaseNotReadyError("knowledge base is not ready")
+        try:
+            self._service.index_manager.get(record.internal_index_id)
+        except KeyError:
+            with self._resource_locks.hold(resource_id):
+                record = self._catalog.get(principal, resource_id)
+                if record.status is not KnowledgeBaseStatus.READY or not record.internal_index_id:
+                    raise KnowledgeBaseNotReadyError("knowledge base is not ready") from None
+                paths = self._assets.resolve(principal, record)
+                restored = self._service.create_index(
+                    [str(path) for path in paths],
+                    namespace=f"{principal.tenant_id.value}:{resource_id}",
+                )
+                if restored.index_id != record.internal_index_id:
+                    self._service.index_manager.delete(restored.index_id)
+                    raise PlatformIntegrityError(
+                        "stored index identity does not match its catalog"
+                    ) from None
+        if record.internal_index_id is None:
+            raise KnowledgeBaseNotReadyError("knowledge base is not ready")
+        return record.internal_index_id
 
     def _record_external_call_failures(self, result: AnswerResult) -> None:
         """Publish bounded provider failures without exposing request content."""

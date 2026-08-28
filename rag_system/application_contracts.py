@@ -63,9 +63,16 @@ class ResourceAccessMode(StrEnum):
     READ = "read"
 
 
+class RetrievalProfile(StrEnum):
+    """Named retrieval contracts supported by the current application runtime."""
+
+    DEFAULT = "default"
+
+
 class ApplicationAuditEventType(StrEnum):
     PROJECT_CREATED = "project_created"
     APPLICATION_CREATED = "application_created"
+    APPLICATION_ARCHIVED = "application_archived"
     REVISION_CREATED = "revision_created"
     DEPLOYMENT_CREATED = "deployment_created"
 
@@ -111,6 +118,7 @@ class KnowledgeChatConfiguration:
     """Typed configuration for the initial trusted knowledge-chat application."""
 
     knowledge_base_ids: tuple[str, ...]
+    retrieval_profile: RetrievalProfile = RetrievalProfile.DEFAULT
     answer_policy: AnswerPolicy = AnswerPolicy()
     session_policy: SessionPolicy = SessionPolicy()
 
@@ -128,6 +136,8 @@ class KnowledgeChatConfiguration:
             raise ApplicationValidationError("knowledge_base_ids contains an invalid ID.") from error
         if len(set(normalized)) != len(normalized):
             raise ApplicationValidationError("knowledge_base_ids cannot contain duplicates.")
+        if not isinstance(self.retrieval_profile, RetrievalProfile):
+            raise ApplicationValidationError("retrieval_profile must be a RetrievalProfile.")
         if not isinstance(self.answer_policy, AnswerPolicy):
             raise ApplicationValidationError("answer_policy must be an AnswerPolicy.")
         if not isinstance(self.session_policy, SessionPolicy):
@@ -417,6 +427,7 @@ __all__ = [
     "ResourceAccessMode",
     "ResourceBinding",
     "ResourceKind",
+    "RetrievalProfile",
     "SessionPolicy",
     "is_valid_timestamp",
     "validate_application_id",

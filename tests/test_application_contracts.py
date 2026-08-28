@@ -21,6 +21,7 @@ from rag_system.application_contracts import (
     ResourceAccessMode,
     ResourceBinding,
     ResourceKind,
+    RetrievalProfile,
     SessionPolicy,
 )
 from rag_system.tenancy import TenantId
@@ -46,6 +47,7 @@ class ApplicationContractTests(unittest.TestCase):
 
         self.assertEqual(configuration.knowledge_base_ids, (KNOWLEDGE_BASE_ID,))
         self.assertTrue(configuration.answer_policy.allow_cloud)
+        self.assertEqual(configuration.retrieval_profile, RetrievalProfile.DEFAULT)
         with self.assertRaises(FrozenInstanceError):
             configuration.knowledge_base_ids = ()  # type: ignore[misc]
 
@@ -58,6 +60,10 @@ class ApplicationContractTests(unittest.TestCase):
             KnowledgeChatConfiguration(knowledge_base_ids=("not-a-kb",))
         with self.assertRaises(ApplicationValidationError):
             KnowledgeChatConfiguration(knowledge_base_ids=(KNOWLEDGE_BASE_ID,), answer_policy={})  # type: ignore[arg-type]
+        with self.assertRaises(ApplicationValidationError):
+            KnowledgeChatConfiguration(
+                knowledge_base_ids=(KNOWLEDGE_BASE_ID,), retrieval_profile="default"
+            )  # type: ignore[arg-type]
 
     def test_policies_reject_ambiguous_values(self) -> None:
         with self.assertRaises(ApplicationValidationError):

@@ -7,7 +7,6 @@ from types import SimpleNamespace
 
 from rag_system.application_contracts import AnswerPolicy, KnowledgeChatConfiguration, SessionPolicy
 from rag_system.application_runtime import (
-    ApplicationBoundResourceUnavailableError,
     ApplicationNotPublishedError,
     KnowledgeApplicationRuntime,
 )
@@ -33,6 +32,7 @@ class RagStub:
     def __init__(self) -> None:
         self.requests: list[tuple[str, AnswerRequest]] = []
         self.cleared: list[tuple[str, str]] = []
+        self.multi_requests: list[tuple[tuple[str, ...], AnswerRequest]] = []
 
     def get_knowledge_base(self, principal: Principal, resource_id: str) -> SimpleNamespace:
         return KnowledgeBaseStub().get(principal, resource_id)
@@ -43,6 +43,18 @@ class RagStub:
 
     def clear_session(self, principal: Principal, resource_id: str, session_id: str) -> bool:
         self.cleared.append((resource_id, session_id))
+        return True
+
+    def answer_across_knowledge_bases(
+        self, principal: Principal, resource_ids: tuple[str, ...], request: AnswerRequest
+    ) -> AnswerResult:
+        self.multi_requests.append((resource_ids, request))
+        return AnswerResult("combined answer", RouteDecision(Route.LOCAL, 1.0, "local"), trace_id="multi")
+
+    def clear_session_across_knowledge_bases(
+        self, principal: Principal, resource_ids: tuple[str, ...], session_id: str
+    ) -> bool:
+        self.cleared.extend((resource_id, session_id) for resource_id in resource_ids)
         return True
 
 
@@ -93,7 +105,17 @@ class KnowledgeApplicationRuntimeTests(unittest.TestCase):
         self.assertNotIn("browser-1", request.session_id)
         self.assertEqual(self.rag.cleared, [(KB_ONE, request.session_id)])
 
-    def test_refuses_unpublished_and_multiple_bound_knowledge_bases(self) -> None:
+        reopened = KnowledgeApplicationRuntime(
+            ApplicationStore(Path(self.directory.name, "applications.sqlite3")),
+            self.rag,  # type: ignore[arg-type]
+        )
+        after_restart = reopened.answer(
+            self.principal, application.application_id,
+            question="What is covered?", session_id="browser-2",
+        )
+        self.assertEqual(after_restart.revision_id, revision.revision_id)
+
+    def test_refuses_unpublished_and_runs_all_bound_knowledge_bases(self) -> None:
         application = self.create_application()
         with self.assertRaises(ApplicationNotPublishedError):
             self.runtime.answer(
@@ -107,10 +129,11 @@ class KnowledgeApplicationRuntimeTests(unittest.TestCase):
         )
         self.service.publish(self.principal, application.application_id, revision.revision_id)
 
-        with self.assertRaises(ApplicationBoundResourceUnavailableError):
-            self.runtime.answer(
-                self.principal, application.application_id, question="Question", session_id="browser-1"
-            )
+        answer = self.runtime.answer(
+            self.principal, application.application_id, question="Question", session_id="browser-1"
+        )
+        self.assertEqual(answer.result.trace_id, "multi")
+        self.assertEqual(self.rag.multi_requests[0][0], (KB_ONE, KB_TWO))
 
 
 if __name__ == "__main__":

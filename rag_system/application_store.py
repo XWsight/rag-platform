@@ -27,6 +27,7 @@ from rag_system.application_contracts import (
     ResourceAccessMode,
     ResourceBinding,
     ResourceKind,
+    RetrievalProfile,
     SessionPolicy,
     is_valid_timestamp,
     validate_application_id,
@@ -38,7 +39,7 @@ from rag_system.sqlite_support import SqliteDatabase
 from rag_system.tenancy import Principal, TenantId
 
 
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 4
 _MAX_LIST_LIMIT = 100
 _MAX_CONFIGURATION_BYTES = 64 * 1024
 
@@ -209,6 +210,36 @@ class ApplicationStore:
                 (tenant_id.value, clean_project_id, clean_limit),
             ).fetchall()
         return tuple(_application_from_row(row) for row in rows)
+
+    def archive_application(
+        self,
+        principal: Principal,
+        application_id: str,
+        audit_event: AuditEvent,
+        *,
+        updated_at: float,
+    ) -> Application:
+        tenant_id = _principal_tenant(principal)
+        clean_id = _safe_application_lookup_id(application_id)
+        if not is_valid_timestamp(updated_at):
+            raise ApplicationValidationError("updated_at must be finite and non-negative.")
+        if audit_event.event_type is not ApplicationAuditEventType.APPLICATION_ARCHIVED:
+            raise ApplicationValidationError("Archiving requires an application-archived audit event.")
+        with self._write_lock, self._write_transaction() as connection:
+            application = self._require_application(connection, tenant_id, clean_id)
+            if updated_at < application.updated_at:
+                raise ApplicationValidationError("updated_at cannot move backwards.")
+            if audit_event.tenant_id != tenant_id or audit_event.application_id != clean_id:
+                raise ApplicationUnavailableError()
+            connection.execute(
+                "UPDATE applications SET status = ?, updated_at = ? WHERE application_id = ?",
+                (ApplicationStatus.ARCHIVED.value, updated_at, clean_id),
+            )
+            self._insert_audit_event(connection, audit_event)
+            row = self._select_application(connection, tenant_id, application.application_id)
+        if row is None:
+            raise ApplicationUnavailableError()
+        return _application_from_row(row)
 
     def create_revision(
         self,
@@ -462,7 +493,7 @@ class ApplicationStore:
             rows = connection.execute(
                 """
                 SELECT * FROM application_audit_events WHERE tenant_id = ?
-                ORDER BY occurred_at DESC, audit_event_id DESC LIMIT ?
+                ORDER BY occurred_at DESC, rowid DESC LIMIT ?
                 """,
                 (tenant_id.value, clean_limit),
             ).fetchall()
@@ -479,7 +510,13 @@ class ApplicationStore:
             elif version == 1:
                 self._validate_schema(connection)
                 self._migrate_v1_to_v2(connection)
-            elif version != _SCHEMA_VERSION:
+                version = 2
+            if version == 2:
+                self._migrate_v2_to_v3(connection)
+                version = 3
+            if version == 3:
+                self._migrate_v3_to_v4(connection)
+            elif version not in {0, _SCHEMA_VERSION}:
                 raise ApplicationStoreSchemaError()
             self._validate_schema(connection)
 
@@ -491,6 +528,36 @@ class ApplicationStore:
         ).fetchall()
         for row in rows:
             configuration = _decode_v1_configuration(row["configuration_json"])
+            connection.execute(
+                "UPDATE application_revisions SET configuration_json = ? WHERE revision_id = ?",
+                (_encode_legacy_configuration(configuration), row["revision_id"]),
+            )
+        connection.execute("PRAGMA user_version = 2")
+
+    @staticmethod
+    def _migrate_v2_to_v3(connection: sqlite3.Connection) -> None:
+        connection.execute("ALTER TABLE application_audit_events RENAME TO application_audit_events_v2")
+        connection.execute(_CREATE_AUDIT_EVENTS_SQL)
+        connection.execute(
+            """INSERT INTO application_audit_events SELECT audit_event_id, tenant_id, event_type,
+            occurred_at, actor, summary, project_id, application_id, revision_id
+            FROM application_audit_events_v2"""
+        )
+        connection.execute("DROP TABLE application_audit_events_v2")
+        connection.execute(
+            "CREATE INDEX idx_application_audit_events_tenant_occurred ON "
+            "application_audit_events (tenant_id, occurred_at DESC, audit_event_id DESC)"
+        )
+        connection.execute("PRAGMA user_version = 3")
+
+    @staticmethod
+    def _migrate_v3_to_v4(connection: sqlite3.Connection) -> None:
+        """Name the retrieval strategy in every immutable application configuration."""
+        rows = connection.execute(
+            "SELECT revision_id, configuration_json FROM application_revisions"
+        ).fetchall()
+        for row in rows:
+            configuration = _decode_legacy_configuration(row["configuration_json"])
             connection.execute(
                 "UPDATE application_revisions SET configuration_json = ? WHERE revision_id = ?",
                 (_encode_configuration(configuration), row["revision_id"]),
@@ -616,6 +683,24 @@ class ApplicationStore:
         )
 
 
+_CREATE_AUDIT_EVENTS_SQL = """
+CREATE TABLE application_audit_events (
+    audit_event_id TEXT PRIMARY KEY NOT NULL,
+    tenant_id TEXT NOT NULL,
+    event_type TEXT NOT NULL CHECK (event_type IN (
+        'project_created', 'application_created', 'application_archived',
+        'revision_created', 'deployment_created'
+    )),
+    occurred_at REAL NOT NULL CHECK (occurred_at >= 0),
+    actor TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    project_id TEXT,
+    application_id TEXT,
+    revision_id TEXT
+)
+"""
+
+
 _CREATE_SCHEMA_SQL = """
 CREATE TABLE projects (
     project_id TEXT PRIMARY KEY NOT NULL,
@@ -669,7 +754,8 @@ CREATE TABLE application_audit_events (
     audit_event_id TEXT PRIMARY KEY NOT NULL,
     tenant_id TEXT NOT NULL,
     event_type TEXT NOT NULL CHECK (event_type IN (
-        'project_created', 'application_created', 'revision_created', 'deployment_created'
+        'project_created', 'application_created', 'application_archived',
+        'revision_created', 'deployment_created'
     )),
     occurred_at REAL NOT NULL CHECK (occurred_at >= 0),
     actor TEXT NOT NULL,
@@ -857,6 +943,7 @@ def _encode_configuration(configuration: KnowledgeChatConfiguration) -> str:
             "require_citations": configuration.answer_policy.require_citations,
         },
         "knowledge_base_ids": list(configuration.knowledge_base_ids),
+        "retrieval_profile": configuration.retrieval_profile.value,
         "session_policy": {
             "enabled": configuration.session_policy.enabled,
             "ttl_seconds": configuration.session_policy.ttl_seconds,
@@ -874,7 +961,7 @@ def _decode_configuration(value: object) -> KnowledgeChatConfiguration:
     try:
         payload = json.loads(value, object_pairs_hook=_strict_json_object)
         if not isinstance(payload, dict) or set(payload) != {
-            "knowledge_base_ids", "answer_policy", "session_policy"
+            "knowledge_base_ids", "retrieval_profile", "answer_policy", "session_policy"
         }:
             raise ValueError
         answer = payload["answer_policy"]
@@ -887,6 +974,7 @@ def _decode_configuration(value: object) -> KnowledgeChatConfiguration:
             raise ValueError
         return KnowledgeChatConfiguration(
             knowledge_base_ids=tuple(payload["knowledge_base_ids"]),
+            retrieval_profile=RetrievalProfile(payload["retrieval_profile"]),
             answer_policy=AnswerPolicy(**answer),
             session_policy=SessionPolicy(**session),
         )
@@ -908,6 +996,50 @@ def _decode_v1_configuration(value: object) -> KnowledgeChatConfiguration:
         session = payload["session_policy"]
         if not isinstance(answer, dict) or set(answer) != {
             "require_citations", "allow_web", "allow_research"
+        }:
+            raise ValueError
+        if not isinstance(session, dict) or set(session) != {"enabled", "ttl_seconds"}:
+            raise ValueError
+        return KnowledgeChatConfiguration(
+            knowledge_base_ids=tuple(payload["knowledge_base_ids"]),
+            answer_policy=AnswerPolicy(**answer),
+            session_policy=SessionPolicy(**session),
+        )
+    except (ApplicationContractError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise ApplicationStoreSchemaError() from error
+
+
+def _encode_legacy_configuration(configuration: KnowledgeChatConfiguration) -> str:
+    payload = {
+        "answer_policy": {
+            "allow_cloud": configuration.answer_policy.allow_cloud,
+            "allow_research": configuration.answer_policy.allow_research,
+            "allow_web": configuration.answer_policy.allow_web,
+            "require_citations": configuration.answer_policy.require_citations,
+        },
+        "knowledge_base_ids": list(configuration.knowledge_base_ids),
+        "session_policy": {
+            "enabled": configuration.session_policy.enabled,
+            "ttl_seconds": configuration.session_policy.ttl_seconds,
+        },
+    }
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
+def _decode_legacy_configuration(value: object) -> KnowledgeChatConfiguration:
+    """Decode the store-v2/v3 shape before retrieval profiles were explicit."""
+    if not isinstance(value, str) or len(value.encode("utf-8")) > _MAX_CONFIGURATION_BYTES:
+        raise ApplicationStoreSchemaError()
+    try:
+        payload = json.loads(value, object_pairs_hook=_strict_json_object)
+        if not isinstance(payload, dict) or set(payload) != {
+            "knowledge_base_ids", "answer_policy", "session_policy"
+        }:
+            raise ValueError
+        answer = payload["answer_policy"]
+        session = payload["session_policy"]
+        if not isinstance(answer, dict) or set(answer) != {
+            "require_citations", "allow_cloud", "allow_web", "allow_research"
         }:
             raise ValueError
         if not isinstance(session, dict) or set(session) != {"enabled", "ttl_seconds"}:

@@ -575,7 +575,17 @@ def create_operational_metrics(namespace: str = "rag") -> OperationalMetrics:
     prefix = _validate_metric_name(namespace)
     registry = MetricRegistry()
     outcomes = {"success", "error", "refused", "rate_limited", "unavailable"}
-    operations = {"answer", "health", "index", "ingest", "research"}
+    operations = {
+        "answer",
+        "application_answer",
+        "application_manage",
+        "application_publish",
+        "application_read",
+        "health",
+        "index",
+        "ingest",
+        "research",
+    }
     routes = {"error", "hybrid", "local", "refused", "retrieval_only", "web"}
 
     requests = registry.counter(

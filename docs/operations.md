@@ -36,6 +36,9 @@ python scripts/verify_runtime_probe.py \
 不会上传、索引、回答或输出密钥。它只输出已通过的检查名称和目标地址。将其纳入部署编排或监控
 系统时，密钥文件必须由执行身份独占读取，且输出日志不得附带命令行中的密钥。
 
+发布 Knowledge App 后还应执行 `scripts/verify_application_probe.py`，核对 active Revision、Revision 历史和
+Deployment 历史一致。完整命令与应用迁移/退役边界见[版本化应用平台](application-platform.md)。
+
 应用事件日志使用结构化字段并主动避开问题正文、文档正文和密钥。容器日志采用本地轮转驱动，但日志仍应按组织策略转存与控制访问。
 
 ## 一致性备份
@@ -125,7 +128,9 @@ API Key 或客户标识写入演练报告。
 
 当前版本把 Catalog 升级到 schema v4。全新空存储会直接初始化为 v4；首次打开已有 schema v2/v3 时，应用会在单个 SQLite 事务中重建目录表并写入 `user_version=4`，以支持显式 `PREPARING` 和不可变清单提交。未知版本以及带旧表的未版本化数据库会被拒绝。该迁移对旧程序不向后兼容：升级前必须完成停写全卷快照，回滚时必须同时恢复旧镜像和升级前快照，不能只切回旧镜像，也不要手工修改 `PRAGMA user_version`。
 
-不要用两个版本同时连接同一个卷进行“蓝绿”测试；这仍是并发写入同一 SQLite/向量索引数据集。
+`applications.sqlite3` 当前 schema 为 v4；升级会在事务内依次补齐云端策略默认值、扩展退役审计事件，并为旧版本配置写入显式的 `retrieval_profile=default`。
+该迁移同样要求旧镜像与升级前全卷快照配对回滚。不要用两个版本同时连接同一个卷进行“蓝绿”测试；
+这仍是并发写入同一 SQLite/向量索引数据集。
 
 ## 密钥轮换
 

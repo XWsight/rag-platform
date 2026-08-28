@@ -14,6 +14,7 @@ from rag_system.application_contracts import (
     Deployment,
     DeploymentEnvironment,
     Project,
+    RetrievalProfile,
 )
 from rag_system.domain import AnswerClaim, AnswerResult, Citation, Route
 from rag_system.grounding import (
@@ -212,6 +213,7 @@ class SessionPolicyPayload(StrictModel):
 
 class RevisionCreatePayload(StrictModel):
     knowledge_base_ids: list[str] = Field(min_length=1, max_length=32)
+    retrieval_profile: RetrievalProfile = RetrievalProfile.DEFAULT
     answer_policy: AnswerPolicyPayload = AnswerPolicyPayload()
     session_policy: SessionPolicyPayload = SessionPolicyPayload()
     change_summary: str = Field(min_length=1, max_length=500)
@@ -223,6 +225,7 @@ class RevisionResponse(StrictModel):
     revision_number: int = Field(ge=1)
     configuration_schema_version: int = Field(ge=1)
     knowledge_base_ids: tuple[str, ...]
+    retrieval_profile: RetrievalProfile
     answer_policy: AnswerPolicyPayload
     session_policy: SessionPolicyPayload
     created_at: float
@@ -285,6 +288,7 @@ def revision_response(revision: ApplicationRevision) -> RevisionResponse:
         revision_number=revision.revision_number,
         configuration_schema_version=revision.configuration_schema_version,
         knowledge_base_ids=revision.configuration.knowledge_base_ids,
+        retrieval_profile=revision.configuration.retrieval_profile,
         answer_policy=AnswerPolicyPayload(
             require_citations=policy.require_citations,
             allow_cloud=policy.allow_cloud,

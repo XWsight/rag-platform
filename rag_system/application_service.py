@@ -147,6 +147,22 @@ class ApplicationService:
         _require_reader(principal)
         return self._repository.list_applications(principal, project_id, limit=limit)
 
+    def archive_application(self, principal: Principal, application_id: str) -> Application:
+        _require_operator(principal)
+        application = self._repository.get_application(principal, application_id)
+        if application.status is ApplicationStatus.ARCHIVED:
+            raise ApplicationServiceValidationError("Application is already archived.")
+        now = self._now()
+        event = AuditEvent(
+            audit_event_id=_new_id("audit"), tenant_id=principal.tenant_id,
+            event_type=ApplicationAuditEventType.APPLICATION_ARCHIVED, occurred_at=now,
+            actor=principal.subject, summary="Archived an application.",
+            project_id=application.project_id, application_id=application.application_id,
+        )
+        return self._repository.archive_application(
+            principal, application.application_id, event, updated_at=now
+        )
+
     def create_knowledge_revision(
         self,
         principal: Principal,
@@ -157,6 +173,10 @@ class ApplicationService:
     ) -> ApplicationRevision:
         _require_writer(principal)
         application = self._repository.get_application(principal, application_id)
+        if application.status is ApplicationStatus.ARCHIVED:
+            raise ApplicationServiceValidationError(
+                "Archived applications cannot accept new revisions."
+            )
         if application.application_kind is not ApplicationKind.KNOWLEDGE_CHAT:
             raise ApplicationServiceValidationError("Unsupported application kind.")
         self._verify_ready_knowledge_bases(principal, configuration.knowledge_base_ids)
@@ -227,6 +247,10 @@ class ApplicationService:
         if environment is not DeploymentEnvironment.PRODUCTION:
             raise ApplicationServiceValidationError("Only production deployments are supported.")
         application = self._repository.get_application(principal, application_id)
+        if application.status is ApplicationStatus.ARCHIVED:
+            raise ApplicationServiceValidationError(
+                "Archived applications cannot be published."
+            )
         revision = self._repository.get_revision(principal, application.application_id, revision_id)
         self._verify_ready_knowledge_bases(principal, revision.configuration.knowledge_base_ids)
         now = self._now()
