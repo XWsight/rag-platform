@@ -129,6 +129,21 @@ def register_application_routes(
         security.consume(request, principal)
         return application_response(service.get_application(principal, application_id))
 
+    @app.delete(
+        "/v1/applications/{application_id}",
+        response_model=ApplicationResponse,
+        tags=["applications"],
+        summary="Archive an application while retaining its immutable history",
+    )
+    def archive_application(
+        request: Request,
+        principal: Annotated[Principal, Depends(security.operator)],
+        application_id: str,
+    ) -> ApplicationResponse:
+        request.state.operation = "application_manage"
+        security.consume(request, principal)
+        return application_response(service.archive_application(principal, application_id))
+
     @app.post(
         "/v1/applications/{application_id}/revisions",
         response_model=RevisionResponse,
@@ -144,6 +159,7 @@ def register_application_routes(
         security.consume(request, principal)
         configuration = KnowledgeChatConfiguration(
             knowledge_base_ids=tuple(payload.knowledge_base_ids),
+            retrieval_profile=payload.retrieval_profile,
             answer_policy=AnswerPolicy(**payload.answer_policy.model_dump()),
             session_policy=SessionPolicy(**payload.session_policy.model_dump()),
         )

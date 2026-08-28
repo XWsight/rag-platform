@@ -4,6 +4,10 @@
 
 数据维护、双人标注、family 语义和 split 使用规则见 [`evals/README.md`](../evals/README.md)。
 
+发布版本化应用时，应将正式 AnswerBenchmarkReport 通过 `application_evaluation.bind_application_evaluation`
+绑定到不可变 Revision。输出同时记录应用 ID、Revision ID、revision number、配置摘要和数据集摘要；任何
+策略或知识库绑定变化都会产生新的配置摘要，必须重新评测，不能沿用上一 Revision 的通过结论。
+
 ## 三类证据
 
 | 层级 | 输入 | 实际测量对象 | 能说明什么 | 不能说明什么 |

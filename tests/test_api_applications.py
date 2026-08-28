@@ -104,6 +104,17 @@ class ApplicationApiTests(unittest.TestCase):
             ).json()["count"],
             2,
         )
+        archived = self.client.delete(
+            f"/v1/applications/{application_id}", headers=self.headers
+        )
+        self.assertEqual(archived.status_code, 200)
+        self.assertEqual(archived.json()["status"], "archived")
+        refused = self.client.post(
+            f"/v1/apps/{application_id}/answer", headers=self.headers,
+            json={"question": "What is RAG?", "session_id": "browser-2"},
+        )
+        self.assertEqual(refused.status_code, 409)
+        self.assertEqual(refused.json()["error"]["code"], "application_not_published")
 
     def test_openapi_and_strict_payloads_expose_the_platform_contract(self) -> None:
         document = self.client.get("/openapi.json").json()

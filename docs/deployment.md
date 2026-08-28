@@ -68,7 +68,7 @@ curl -H 'X-API-Key: <调用方密钥>' http://127.0.0.1:8000/v1/knowledge-bases
 
 - 进程固定以 UID/GID `10001:10001` 运行，不拥有 Linux capabilities，并启用 `no-new-privileges`。
 - 容器根文件系统只读；仅 `/data` 和受限的 `/tmp` 可写。
-- `/data` 包含目录型文档存储、`catalog.sqlite3`、`idempotency.sqlite3`、`jobs.sqlite3`、本地向量索引文件和模型缓存。
+- `/data` 包含目录型文档存储、`catalog.sqlite3`、`applications.sqlite3`、`idempotency.sqlite3`、`jobs.sqlite3`、本地向量索引文件和模型缓存。
 - 向量索引仅在当前进程内使用；Embedding 模型标识由受信部署配置固定。`/data/vector` 中的索引文件是受信持久化状态，不得导入不可信文件或在服务运行时由其他进程修改。索引文件按清单校验，写入采用临时文件加原子替换；发现损坏时服务关闭式失败并要求从原文重建。
 - Compose 设置 CPU、内存、进程数、文件描述符和日志轮转边界。默认 4 GiB 只是起点，不能替代压测。
 - API 固定一个 Uvicorn worker。增加 worker 数不会把本地状态变成分布式状态，反而会破坏任务、限流和存储的一致性。

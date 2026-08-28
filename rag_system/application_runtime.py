@@ -62,7 +62,7 @@ class KnowledgeApplicationRuntime:
             principal, application.application_id, application.active_revision_id
         )
         configuration = revision.configuration
-        resource_id = self._resolve_bound_knowledge_base(
+        resource_ids = self._resolve_bound_knowledge_bases(
             principal, application.application_id, revision.revision_id, configuration
         )
         runtime_session_id = _runtime_session_id(
@@ -76,11 +76,20 @@ class KnowledgeApplicationRuntime:
             deep_research=configuration.answer_policy.allow_research,
         )
         try:
-            result = self._rag.answer(principal, resource_id, request)
+            result = (
+                self._rag.answer(principal, resource_ids[0], request)
+                if len(resource_ids) == 1
+                else self._rag.answer_across_knowledge_bases(principal, resource_ids, request)
+            )
         finally:
             if not configuration.session_policy.enabled:
                 try:
-                    self._rag.clear_session(principal, resource_id, runtime_session_id)
+                    if len(resource_ids) == 1:
+                        self._rag.clear_session(principal, resource_ids[0], runtime_session_id)
+                    else:
+                        self._rag.clear_session_across_knowledge_bases(
+                            principal, resource_ids, runtime_session_id
+                        )
                 except Exception:
                     pass
         return ApplicationAnswer(
@@ -89,25 +98,27 @@ class KnowledgeApplicationRuntime:
             result=result,
         )
 
-    def _resolve_bound_knowledge_base(
+    def _resolve_bound_knowledge_bases(
         self,
         principal: Principal,
         application_id: str,
         revision_id: str,
         configuration: KnowledgeChatConfiguration,
-    ) -> str:
+    ) -> tuple[str, ...]:
         bindings = self._applications.list_bindings(principal, application_id, revision_id)
         bound_ids = tuple(binding.resource_id for binding in bindings)
-        if bound_ids != configuration.knowledge_base_ids or len(bound_ids) != 1:
+        if len(bound_ids) != len(configuration.knowledge_base_ids) or set(bound_ids) != set(
+            configuration.knowledge_base_ids
+        ):
             raise ApplicationBoundResourceUnavailableError()
-        resource_id = bound_ids[0]
-        try:
-            record = self._rag.get_knowledge_base(principal, resource_id)
-        except Exception as error:
-            raise ApplicationBoundResourceUnavailableError() from error
-        if record.status is not KnowledgeBaseStatus.READY:
-            raise ApplicationBoundResourceUnavailableError()
-        return resource_id
+        for resource_id in configuration.knowledge_base_ids:
+            try:
+                record = self._rag.get_knowledge_base(principal, resource_id)
+            except Exception as error:
+                raise ApplicationBoundResourceUnavailableError() from error
+            if record.status is not KnowledgeBaseStatus.READY:
+                raise ApplicationBoundResourceUnavailableError()
+        return configuration.knowledge_base_ids
 
 
 def _runtime_session_id(application_id: str, revision_id: str, session_id: object) -> str:

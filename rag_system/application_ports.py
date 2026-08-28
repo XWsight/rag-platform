@@ -45,6 +45,10 @@ class ApplicationRepository(Protocol):
         self, principal: Principal, project_id: str, *, limit: int = 50
     ) -> tuple[Application, ...]: ...
 
+    def archive_application(
+        self, principal: Principal, application_id: str, audit_event: AuditEvent, *, updated_at: float
+    ) -> Application: ...
+
     def create_revision(
         self,
         principal: Principal,
@@ -271,6 +275,8 @@ class KnowledgeService(Protocol):
     def clear_session(self, session_id: str) -> bool: ...
 
     def answer(self, index_id: str, request: AnswerRequest) -> AnswerResult: ...
+
+    def answer_many(self, index_ids: Sequence[str], request: AnswerRequest) -> AnswerResult: ...
 
     def close(self) -> None: ...
 

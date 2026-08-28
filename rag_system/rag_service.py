@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Sequence
+from contextlib import ExitStack
 from uuid import uuid4
 
 from rag_system.config import Settings
@@ -98,6 +99,14 @@ class RagService:
                 close_provider()
 
     def answer(self, index_id: str, request: AnswerRequest) -> AnswerResult:
+        return self.answer_many((index_id,), request)
+
+    def answer_many(self, index_ids: Sequence[str], request: AnswerRequest) -> AnswerResult:
+        normalized_index_ids = tuple(index_ids)
+        if not normalized_index_ids or len(normalized_index_ids) > 32:
+            raise ValueError("index_ids has an invalid item count")
+        if len(set(normalized_index_ids)) != len(normalized_index_ids):
+            raise ValueError("index_ids cannot contain duplicates")
         started = self.timer()
         trace_id = uuid4().hex[:16]
         question = (request.question or "").strip()
@@ -111,11 +120,23 @@ class RagService:
         query_plan, planning_error = self._query_plan(question, request)
         retrieval_queries = (retrieval_query, *query_plan[1:])
         try:
-            with self.index_manager.lease(index_id) as retriever:
-                hits = self._retrieve_queries(
-                    retriever,
-                    retrieval_queries,
-                    deep_research=request.deep_research,
+            with ExitStack() as stack:
+                retrievers = tuple(
+                    stack.enter_context(self.index_manager.lease(index_id))
+                    for index_id in normalized_index_ids
+                )
+                rankings = {
+                    f"index-{index}": self._retrieve_queries(
+                        retriever, retrieval_queries, deep_research=request.deep_research
+                    )
+                    for index, retriever in enumerate(retrievers, start=1)
+                }
+                hits = (
+                    next(iter(rankings.values()))
+                    if len(rankings) == 1
+                    else self._fuse_index_hits(
+                        tuple(rankings.values()), top_k=self.settings.final_evidence_count
+                    )
                 )
         except ProviderError as error:
             result = self._result(
@@ -325,6 +346,21 @@ class RagService:
             for index, query in enumerate(queries, start=1)
         }
         return fuse_query_hits(rankings, top_k=self.settings.final_evidence_count)
+
+    @staticmethod
+    def _fuse_index_hits(
+        rankings: Sequence[Sequence[SearchHit]], *, top_k: int
+    ) -> tuple[SearchHit, ...]:
+        """Merge comparable per-index scores while removing duplicate chunks."""
+        best: dict[str, SearchHit] = {}
+        for ranking in rankings:
+            for hit in ranking:
+                current = best.get(hit.chunk.chunk_id)
+                if current is None or hit.score > current.score:
+                    best[hit.chunk.chunk_id] = hit
+        return tuple(
+            sorted(best.values(), key=lambda hit: (-hit.score, hit.chunk.chunk_id))[:top_k]
+        )
 
     @staticmethod
     def _error_counts_diagnostic(error_counts: dict[str, int]) -> str:

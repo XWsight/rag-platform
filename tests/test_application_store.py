@@ -197,7 +197,7 @@ class ApplicationStoreTests(unittest.TestCase):
         with closing(sqlite3.connect(self.database)) as connection:
             self.assertEqual(connection.execute("PRAGMA journal_mode").fetchone()[0].lower(), "wal")
             self.assertEqual(connection.execute("PRAGMA foreign_keys").fetchone()[0], 0)
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 4)
         project = self.project()
         self.store.create_project(self.tenant_a, project)
         with self.assertRaises(ApplicationStoreStorageError):
@@ -214,6 +214,7 @@ class ApplicationStoreTests(unittest.TestCase):
                 (revision.revision_id,),
             ).fetchone()
             payload = json.loads(row[0])
+            del payload["retrieval_profile"]
             del payload["answer_policy"]["allow_cloud"]
             connection.execute(
                 "UPDATE application_revisions SET configuration_json = ? WHERE revision_id = ?",
@@ -230,7 +231,7 @@ class ApplicationStoreTests(unittest.TestCase):
             ).configuration.answer_policy.allow_cloud
         )
         with closing(sqlite3.connect(self.database)) as connection:
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 4)
 
     def test_schema_rejects_a_missing_custom_index_without_rewriting_data(self) -> None:
         with closing(sqlite3.connect(self.database)) as connection:

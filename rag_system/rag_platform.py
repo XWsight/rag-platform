@@ -156,6 +156,11 @@ class RagPlatform:
     ) -> AnswerResult:
         return self._answers.answer(principal, resource_id, request)
 
+    def answer_across_knowledge_bases(
+        self, principal: Principal, resource_ids: Sequence[str], request: AnswerRequest
+    ) -> AnswerResult:
+        return self._answers.answer_many(principal, resource_ids, request)
+
     def clear_session(
         self,
         principal: Principal,
@@ -163,6 +168,11 @@ class RagPlatform:
         session_id: str,
     ) -> bool:
         return self._answers.clear_session(principal, resource_id, session_id)
+
+    def clear_session_across_knowledge_bases(
+        self, principal: Principal, resource_ids: Sequence[str], session_id: str
+    ) -> bool:
+        return self._answers.clear_session_many(principal, resource_ids, session_id)
 
     def close(self) -> None:
         """Release owned runtime resources once, while attempting every cleanup."""

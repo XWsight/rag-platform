@@ -31,6 +31,10 @@
 
 应用指标仅包含受限的低基数标签，例如 operation、route、provider 和 error type；不包含租户、API Key、问题、文档、会话或供应商响应内容。`rag_external_call_errors_total` 在回答生成、研究规划和联网检索出现已分类失败时递增，便于区分鉴权、协议、限流、超时、不可用与未知错误，而不会暴露原始异常消息。
 
+版本化应用请求使用 `application_read`、`application_manage`、`application_publish` 和
+`application_answer` operation。它们可用于发布失败率与应用回答延迟告警，但应用 ID 和 Revision ID
+不会成为标签；具体版本追溯应查询 Deployment/Audit，并使用发布后应用探针。
+
 `/health/ready` 只覆盖本地耐久层与任务执行器，并不探测模型下载、向量查询或外部供应商。因此 `UP`/readiness 告警也不能代替带有合规脱敏样本的定期端到端业务探针。
 
 应用会导出当前等待 worker 的 `rag_job_queue_depth`、所有非终态任务数

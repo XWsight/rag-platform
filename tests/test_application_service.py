@@ -5,11 +5,16 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from rag_system.application_contracts import KnowledgeChatConfiguration
+from rag_system.application_contracts import (
+    ApplicationAuditEventType,
+    ApplicationStatus,
+    KnowledgeChatConfiguration,
+)
 from rag_system.application_service import (
     ApplicationAuthorizationError,
     ApplicationResourceUnavailableError,
     ApplicationService,
+    ApplicationServiceValidationError,
 )
 from rag_system.application_store import ApplicationStore
 from rag_system.knowledge_base_contracts import KnowledgeBaseStatus
@@ -97,6 +102,40 @@ class ApplicationServiceTests(unittest.TestCase):
         )
         with self.assertRaises(ApplicationAuthorizationError):
             self.service.publish(self.reader, application.application_id, revision.revision_id)
+
+    def test_archive_retains_history_and_records_an_audit_event(self) -> None:
+        project = self.service.create_project(self.writer, "Support")
+        application = self.service.create_knowledge_application(
+            self.writer, project.project_id, "Support assistant"
+        )
+        revision = self.service.create_knowledge_revision(
+            self.writer, application.application_id,
+            KnowledgeChatConfiguration(knowledge_base_ids=(KNOWLEDGE_BASE_ID,)),
+            change_summary="Initial release",
+        )
+        self.service.publish(self.writer, application.application_id, revision.revision_id)
+
+        archived = self.service.archive_application(self.writer, application.application_id)
+
+        self.assertEqual(archived.status, ApplicationStatus.ARCHIVED)
+        self.assertEqual(archived.active_revision_id, revision.revision_id)
+        self.assertEqual(
+            self.store.list_audit_events(self.writer)[0].event_type,
+            ApplicationAuditEventType.APPLICATION_ARCHIVED,
+        )
+        self.assertEqual(len(self.store.list_revisions(self.writer, application.application_id)), 1)
+        self.assertEqual(len(self.store.list_deployments(self.writer, application.application_id)), 1)
+        with self.assertRaises(ApplicationServiceValidationError):
+            self.service.create_knowledge_revision(
+                self.writer,
+                application.application_id,
+                KnowledgeChatConfiguration(knowledge_base_ids=(KNOWLEDGE_BASE_ID,)),
+                change_summary="Must remain retired",
+            )
+        with self.assertRaises(ApplicationServiceValidationError):
+            self.service.publish(
+                self.writer, application.application_id, revision.revision_id
+            )
 
 
 if __name__ == "__main__":

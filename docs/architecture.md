@@ -35,6 +35,8 @@ HTTP 入口不提供 TLS；公网部署必须使用受控反向代理。上传�
 | 边界 | 当前职责 | 不负责 |
 | --- | --- | --- |
 | [`application.py`](../rag_system/application.py) | 向 HTTP、CLI、后台入口和未来 Agent 暴露框架无关的用例端口、提交 DTO 与稳定应用错误 | FastAPI、SQLite、向量后端或供应商实现 |
+| [`application_contracts.py`](../rag_system/application_contracts.py)、[`application_service.py`](../rag_system/application_service.py)、[`application_runtime.py`](../rag_system/application_runtime.py) | Project/Application/Revision/Deployment 原语、原子发布/回滚/退役，以及单/多知识库运行解析 | HTTP、Provider 密钥或通用工作流执行 |
+| [`application_store.py`](../rag_system/application_store.py) | 独立 SQLite 应用图、严格配置迁移、资源绑定和审计历史 | Catalog、向量或模型调用 |
 | [`knowledge_base_contracts.py`](../rag_system/knowledge_base_contracts.py) | 存储无关的知识库状态、文档清单、记录值对象与状态迁移约束 | SQLite schema、文件布局或 HTTP schema |
 | [`api.py`](../rag_system/api.py)、[`api_contract.py`](../rag_system/api_contract.py)、[`api_errors.py`](../rag_system/api_errors.py) | API Key/Bearer 接入、角色检查、版本化 wire schema、上传读取、租户限流、集中错误分类、安全响应头、健康检查和 `/metrics` | 文档解析、索引算法、业务状态迁移或具体平台实现 |
 | [`tenancy.py`](../rag_system/tenancy.py) | `Principal`、`TenantId`、仅保存摘要的 API Key 校验和非枚举式拒绝 | 密钥签发、在线撤销、组织级 IAM |

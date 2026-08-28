@@ -106,10 +106,24 @@ class RagApplication(Protocol):
         request: AnswerRequest,
     ) -> AnswerResult: ...
 
+    def answer_across_knowledge_bases(
+        self,
+        principal: Principal,
+        resource_ids: Sequence[str],
+        request: AnswerRequest,
+    ) -> AnswerResult: ...
+
     def clear_session(
         self,
         principal: Principal,
         resource_id: str,
+        session_id: str,
+    ) -> bool: ...
+
+    def clear_session_across_knowledge_bases(
+        self,
+        principal: Principal,
+        resource_ids: Sequence[str],
         session_id: str,
     ) -> bool: ...
 

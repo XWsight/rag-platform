@@ -114,6 +114,9 @@ class MetricRegistryTests(unittest.TestCase):
     def test_default_metrics_use_semantic_label_allowlists(self) -> None:
         metrics = create_operational_metrics()
         metrics.requests_total.increment(labels={"operation": "answer", "outcome": "success"})
+        metrics.requests_total.increment(
+            labels={"operation": "application_answer", "outcome": "success"}
+        )
         metrics.request_duration_seconds.observe(
             0.2,
             labels={"operation": "answer", "route": "local"},
@@ -133,6 +136,7 @@ class MetricRegistryTests(unittest.TestCase):
         rendered = metrics.registry.render_prometheus()
         self.assertNotIn("raw-tenant-id", rendered)
         self.assertIn("rag_requests_total", rendered)
+        self.assertIn('operation="application_answer"', rendered)
         self.assertIn("rag_external_call_errors_total", rendered)
         self.assertIn("rag_job_queue_depth", rendered)
         self.assertIn("rag_job_oldest_active_seconds", rendered)
