@@ -18,6 +18,8 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from rag_system.api import create_app  # noqa: E402
 from rag_system.application import RagApplication  # noqa: E402
+from rag_system.application_runtime import KnowledgeApplicationRuntime  # noqa: E402
+from rag_system.application_service import ApplicationService  # noqa: E402
 from rag_system.config import Settings  # noqa: E402
 from rag_system.observability import JsonEventLogger  # noqa: E402
 from rag_system.rate_limit import TokenBucketRateLimiter  # noqa: E402
@@ -67,6 +69,8 @@ def build_contract() -> dict[str, Any]:
         rate_limiter=TokenBucketRateLimiter(rate_per_second=100.0, capacity=100.0),
         logger=JsonEventLogger(logger),
         close_on_shutdown=False,
+        application_service=cast(ApplicationService, object()),
+        application_runtime=cast(KnowledgeApplicationRuntime, object()),
     )
     schema = json.loads(json.dumps(app.openapi()))
     if not isinstance(schema, dict):

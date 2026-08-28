@@ -10,9 +10,14 @@ from __future__ import annotations
 
 import io
 import logging
+import tempfile
+from pathlib import Path
 
 from rag_system.api import create_app
 from rag_system.application import PlatformUnavailableError
+from rag_system.application_runtime import KnowledgeApplicationRuntime
+from rag_system.application_service import ApplicationService
+from rag_system.application_store import ApplicationStore
 from rag_system.catalog import KnowledgeBaseStatus
 from rag_system.observability import JsonEventLogger
 from rag_system.rate_limit import TokenBucketRateLimiter
@@ -74,6 +79,14 @@ class BrowserE2EPlatform(FakePlatform):
         return True
 
 
+class BrowserKnowledgeBases:
+    def __init__(self, platform: BrowserE2EPlatform) -> None:
+        self._platform = platform
+
+    def get(self, principal: Principal, resource_id: str):
+        return self._platform.get_knowledge_base(principal, resource_id)
+
+
 def create_browser_e2e_app():
     """Return the same composed application served by the browser test runner."""
 
@@ -84,14 +97,24 @@ def create_browser_e2e_app():
     sink = logging.Logger("browser-e2e")
     sink.handlers.clear()
     sink.addHandler(logging.StreamHandler(io.StringIO()))
-    return create_app(
+    application_directory = tempfile.TemporaryDirectory()
+    application_store = ApplicationStore(Path(application_directory.name, "applications.sqlite3"))
+    application_service = ApplicationService(
+        application_store, BrowserKnowledgeBases(platform)  # type: ignore[arg-type]
+    )
+    application_runtime = KnowledgeApplicationRuntime(application_store, platform)
+    app = create_app(
         platform=platform,
         authenticator=authenticator,
         rate_limiter=TokenBucketRateLimiter(rate_per_second=100, capacity=100),
         logger=JsonEventLogger(sink),
         readiness=True,
         close_on_shutdown=False,
+        application_service=application_service,
+        application_runtime=application_runtime,
     )
+    app.state.application_directory = application_directory
+    return app
 
 
 app = create_browser_e2e_app()

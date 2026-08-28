@@ -10,6 +10,27 @@ from rag_system.application import (
     PlatformUnavailableError,
     PlatformValidationError,
 )
+from rag_system.application_runtime import (
+    ApplicationBoundResourceUnavailableError,
+    ApplicationNotPublishedError,
+    ApplicationRuntimeError,
+    ApplicationRuntimeValidationError,
+)
+from rag_system.application_contracts import ApplicationContractError, ApplicationValidationError
+from rag_system.application_service import (
+    ApplicationAuthorizationError,
+    ApplicationResourceUnavailableError,
+    ApplicationServiceError,
+    ApplicationServiceValidationError,
+)
+from rag_system.application_store import (
+    ApplicationRevisionUnavailableError,
+    ApplicationStoreSchemaError,
+    ApplicationStoreStorageError,
+    ApplicationUnavailableError,
+    DeploymentUnavailableError,
+    ProjectUnavailableError,
+)
 from rag_system.catalog import (
     CatalogSchemaError,
     CatalogStorageError,
@@ -72,6 +93,9 @@ APPLICATION_ERROR_TYPES: tuple[type[Exception], ...] = (
     AuthenticationError,
     AuthorizationError,
     PlatformError,
+    ApplicationRuntimeError,
+    ApplicationContractError,
+    ApplicationServiceError,
     CatalogValidationError,
     CatalogSchemaError,
     CatalogStorageError,
@@ -89,15 +113,29 @@ def classify_application_error(error: Exception) -> tuple[int, str, str]:
         return 401, "authentication_failed", "Authentication failed."
     if isinstance(error, AuthorizationError):
         return 404, "resource_unavailable", "Resource is unavailable."
+    if isinstance(error, ApplicationAuthorizationError):
+        return 403, "forbidden", "The operation is not permitted."
     if isinstance(
         error,
-        (KnowledgeBaseUnavailableError, JobNotFoundError, ResourceNotFoundError),
+        (
+            KnowledgeBaseUnavailableError,
+            JobNotFoundError,
+            ResourceNotFoundError,
+            ApplicationBoundResourceUnavailableError,
+            ApplicationResourceUnavailableError,
+            ApplicationUnavailableError,
+            ApplicationRevisionUnavailableError,
+            DeploymentUnavailableError,
+            ProjectUnavailableError,
+        ),
     ):
         return 404, "resource_unavailable", "Resource is unavailable."
     if isinstance(error, IdempotencyConflictError):
         return 409, "idempotency_conflict", "The idempotency key conflicts with this request."
     if isinstance(error, IdempotencyInProgressError):
         return 409, "idempotency_in_progress", "The matching request is still in progress."
+    if isinstance(error, ApplicationNotPublishedError):
+        return 409, "application_not_published", "The application is not published."
     if isinstance(error, (DuplicateResourceError, InvalidStatusTransitionError)):
         return 409, "resource_conflict", "The resource cannot be changed in its current state."
     if isinstance(error, KnowledgeBaseNotReadyError):
@@ -108,6 +146,9 @@ def classify_application_error(error: Exception) -> tuple[int, str, str]:
         error,
         (
             PlatformValidationError,
+            ApplicationRuntimeValidationError,
+            ApplicationServiceValidationError,
+            ApplicationValidationError,
             CatalogValidationError,
             FileStoreSecurityError,
             IdempotencyValidationError,
@@ -134,6 +175,8 @@ def classify_application_error(error: Exception) -> tuple[int, str, str]:
             CatalogStorageError,
             FileStoreIOError,
             ProviderError,
+            ApplicationStoreSchemaError,
+            ApplicationStoreStorageError,
         ),
     ):
         return 503, "service_unavailable", "The service is temporarily unavailable."

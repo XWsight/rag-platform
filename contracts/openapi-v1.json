@@ -31,6 +31,33 @@
           "title": "AnswerClaimResponse",
           "type": "object"
         },
+        "AnswerPolicyPayload": {
+          "additionalProperties": false,
+          "properties": {
+            "allow_cloud": {
+              "default": false,
+              "title": "Allow Cloud",
+              "type": "boolean"
+            },
+            "allow_research": {
+              "default": false,
+              "title": "Allow Research",
+              "type": "boolean"
+            },
+            "allow_web": {
+              "default": false,
+              "title": "Allow Web",
+              "type": "boolean"
+            },
+            "require_citations": {
+              "default": true,
+              "title": "Require Citations",
+              "type": "boolean"
+            }
+          },
+          "title": "AnswerPolicyPayload",
+          "type": "object"
+        },
         "AnswerResponse": {
           "additionalProperties": false,
           "properties": {
@@ -79,6 +106,189 @@
           ],
           "title": "AnswerResponse",
           "type": "object"
+        },
+        "ApplicationAnswerResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "answer": {
+              "maxLength": 20000,
+              "title": "Answer",
+              "type": "string"
+            },
+            "application_id": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Application Id",
+              "type": "string"
+            },
+            "citations": {
+              "items": {
+                "$ref": "#/components/schemas/CitationResponse"
+              },
+              "title": "Citations",
+              "type": "array"
+            },
+            "claims": {
+              "items": {
+                "$ref": "#/components/schemas/AnswerClaimResponse"
+              },
+              "maxItems": 24,
+              "title": "Claims",
+              "type": "array"
+            },
+            "decision": {
+              "$ref": "#/components/schemas/RouteResponse"
+            },
+            "latency_ms": {
+              "minimum": 0.0,
+              "title": "Latency Ms",
+              "type": "number"
+            },
+            "revision_id": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Revision Id",
+              "type": "string"
+            },
+            "trace_id": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Trace Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "answer",
+            "decision",
+            "claims",
+            "citations",
+            "trace_id",
+            "latency_ms",
+            "application_id",
+            "revision_id"
+          ],
+          "title": "ApplicationAnswerResponse",
+          "type": "object"
+        },
+        "ApplicationCreatePayload": {
+          "additionalProperties": false,
+          "properties": {
+            "application_kind": {
+              "const": "knowledge_chat",
+              "default": "knowledge_chat",
+              "title": "Application Kind",
+              "type": "string"
+            },
+            "display_name": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Display Name",
+              "type": "string"
+            },
+            "project_id": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_id",
+            "display_name"
+          ],
+          "title": "ApplicationCreatePayload",
+          "type": "object"
+        },
+        "ApplicationKind": {
+          "description": "Application runtimes supported by the first platform kernel.",
+          "enum": [
+            "knowledge_chat"
+          ],
+          "title": "ApplicationKind",
+          "type": "string"
+        },
+        "ApplicationListResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "count": {
+              "minimum": 0.0,
+              "title": "Count",
+              "type": "integer"
+            },
+            "items": {
+              "items": {
+                "$ref": "#/components/schemas/ApplicationResponse"
+              },
+              "title": "Items",
+              "type": "array"
+            }
+          },
+          "required": [
+            "items",
+            "count"
+          ],
+          "title": "ApplicationListResponse",
+          "type": "object"
+        },
+        "ApplicationResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "active_revision_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Active Revision Id"
+            },
+            "application_kind": {
+              "$ref": "#/components/schemas/ApplicationKind"
+            },
+            "created_at": {
+              "title": "Created At",
+              "type": "number"
+            },
+            "display_name": {
+              "title": "Display Name",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "project_id": {
+              "title": "Project Id",
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/components/schemas/ApplicationStatus"
+            },
+            "updated_at": {
+              "title": "Updated At",
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "project_id",
+            "display_name",
+            "application_kind",
+            "active_revision_id",
+            "status",
+            "created_at",
+            "updated_at"
+          ],
+          "title": "ApplicationResponse",
+          "type": "object"
+        },
+        "ApplicationStatus": {
+          "enum": [
+            "active",
+            "archived"
+          ],
+          "title": "ApplicationStatus",
+          "type": "string"
         },
         "Body_create_knowledge_base_v1_knowledge_bases_post": {
           "properties": {
@@ -199,6 +409,30 @@
           "title": "ConfiguredAnswerPayload",
           "type": "object"
         },
+        "ConfiguredApplicationAnswerPayload": {
+          "additionalProperties": false,
+          "properties": {
+            "question": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Question",
+              "type": "string"
+            },
+            "session_id": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "question",
+            "session_id"
+          ],
+          "title": "ConfiguredApplicationAnswerPayload",
+          "type": "object"
+        },
         "DeleteResponse": {
           "additionalProperties": false,
           "properties": {
@@ -211,6 +445,90 @@
             "deleted"
           ],
           "title": "DeleteResponse",
+          "type": "object"
+        },
+        "DeploymentCreatePayload": {
+          "additionalProperties": false,
+          "properties": {
+            "revision_id": {
+              "title": "Revision Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "revision_id"
+          ],
+          "title": "DeploymentCreatePayload",
+          "type": "object"
+        },
+        "DeploymentEnvironment": {
+          "enum": [
+            "development",
+            "staging",
+            "production"
+          ],
+          "title": "DeploymentEnvironment",
+          "type": "string"
+        },
+        "DeploymentListResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "count": {
+              "minimum": 0.0,
+              "title": "Count",
+              "type": "integer"
+            },
+            "items": {
+              "items": {
+                "$ref": "#/components/schemas/DeploymentResponse"
+              },
+              "title": "Items",
+              "type": "array"
+            }
+          },
+          "required": [
+            "items",
+            "count"
+          ],
+          "title": "DeploymentListResponse",
+          "type": "object"
+        },
+        "DeploymentResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "application_id": {
+              "title": "Application Id",
+              "type": "string"
+            },
+            "deployed_at": {
+              "title": "Deployed At",
+              "type": "number"
+            },
+            "deployed_by": {
+              "title": "Deployed By",
+              "type": "string"
+            },
+            "environment": {
+              "$ref": "#/components/schemas/DeploymentEnvironment"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "revision_id": {
+              "title": "Revision Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "application_id",
+            "revision_id",
+            "environment",
+            "deployed_at",
+            "deployed_by"
+          ],
+          "title": "DeploymentResponse",
           "type": "object"
         },
         "DocumentResponse": {
@@ -289,6 +607,19 @@
             "error"
           ],
           "title": "ErrorEnvelope",
+          "type": "object"
+        },
+        "HTTPValidationError": {
+          "properties": {
+            "detail": {
+              "items": {
+                "$ref": "#/components/schemas/ValidationError"
+              },
+              "title": "Detail",
+              "type": "array"
+            }
+          },
+          "title": "HTTPValidationError",
           "type": "object"
         },
         "HealthResponse": {
@@ -570,6 +901,211 @@
           "title": "KnowledgeBaseSubmissionResponse",
           "type": "object"
         },
+        "ProjectCreatePayload": {
+          "additionalProperties": false,
+          "properties": {
+            "description": {
+              "default": "",
+              "maxLength": 2000,
+              "title": "Description",
+              "type": "string"
+            },
+            "display_name": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Display Name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "display_name"
+          ],
+          "title": "ProjectCreatePayload",
+          "type": "object"
+        },
+        "ProjectListResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "count": {
+              "minimum": 0.0,
+              "title": "Count",
+              "type": "integer"
+            },
+            "items": {
+              "items": {
+                "$ref": "#/components/schemas/ProjectResponse"
+              },
+              "title": "Items",
+              "type": "array"
+            }
+          },
+          "required": [
+            "items",
+            "count"
+          ],
+          "title": "ProjectListResponse",
+          "type": "object"
+        },
+        "ProjectResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "created_at": {
+              "title": "Created At",
+              "type": "number"
+            },
+            "description": {
+              "title": "Description",
+              "type": "string"
+            },
+            "display_name": {
+              "title": "Display Name",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "updated_at": {
+              "title": "Updated At",
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "display_name",
+            "description",
+            "created_at",
+            "updated_at"
+          ],
+          "title": "ProjectResponse",
+          "type": "object"
+        },
+        "RevisionCreatePayload": {
+          "additionalProperties": false,
+          "properties": {
+            "answer_policy": {
+              "$ref": "#/components/schemas/AnswerPolicyPayload",
+              "default": {
+                "allow_cloud": false,
+                "allow_research": false,
+                "allow_web": false,
+                "require_citations": true
+              }
+            },
+            "change_summary": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Change Summary",
+              "type": "string"
+            },
+            "knowledge_base_ids": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 32,
+              "minItems": 1,
+              "title": "Knowledge Base Ids",
+              "type": "array"
+            },
+            "session_policy": {
+              "$ref": "#/components/schemas/SessionPolicyPayload",
+              "default": {
+                "enabled": true
+              }
+            }
+          },
+          "required": [
+            "knowledge_base_ids",
+            "change_summary"
+          ],
+          "title": "RevisionCreatePayload",
+          "type": "object"
+        },
+        "RevisionListResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "count": {
+              "minimum": 0.0,
+              "title": "Count",
+              "type": "integer"
+            },
+            "items": {
+              "items": {
+                "$ref": "#/components/schemas/RevisionResponse"
+              },
+              "title": "Items",
+              "type": "array"
+            }
+          },
+          "required": [
+            "items",
+            "count"
+          ],
+          "title": "RevisionListResponse",
+          "type": "object"
+        },
+        "RevisionResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "answer_policy": {
+              "$ref": "#/components/schemas/AnswerPolicyPayload"
+            },
+            "application_id": {
+              "title": "Application Id",
+              "type": "string"
+            },
+            "change_summary": {
+              "title": "Change Summary",
+              "type": "string"
+            },
+            "configuration_schema_version": {
+              "minimum": 1.0,
+              "title": "Configuration Schema Version",
+              "type": "integer"
+            },
+            "created_at": {
+              "title": "Created At",
+              "type": "number"
+            },
+            "created_by": {
+              "title": "Created By",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "knowledge_base_ids": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Knowledge Base Ids",
+              "type": "array"
+            },
+            "revision_number": {
+              "minimum": 1.0,
+              "title": "Revision Number",
+              "type": "integer"
+            },
+            "session_policy": {
+              "$ref": "#/components/schemas/SessionPolicyPayload"
+            }
+          },
+          "required": [
+            "id",
+            "application_id",
+            "revision_number",
+            "configuration_schema_version",
+            "knowledge_base_ids",
+            "answer_policy",
+            "session_policy",
+            "created_at",
+            "created_by",
+            "change_summary"
+          ],
+          "title": "RevisionResponse",
+          "type": "object"
+        },
         "Route": {
           "enum": [
             "local",
@@ -600,6 +1136,71 @@
             "confidence"
           ],
           "title": "RouteResponse",
+          "type": "object"
+        },
+        "SessionPolicyPayload": {
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "default": true,
+              "title": "Enabled",
+              "type": "boolean"
+            },
+            "ttl_seconds": {
+              "anyOf": [
+                {
+                  "maximum": 2592000.0,
+                  "minimum": 60.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ttl Seconds"
+            }
+          },
+          "title": "SessionPolicyPayload",
+          "type": "object"
+        },
+        "ValidationError": {
+          "properties": {
+            "ctx": {
+              "title": "Context",
+              "type": "object"
+            },
+            "input": {
+              "title": "Input"
+            },
+            "loc": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ]
+              },
+              "title": "Location",
+              "type": "array"
+            },
+            "msg": {
+              "title": "Message",
+              "type": "string"
+            },
+            "type": {
+              "title": "Error Type",
+              "type": "string"
+            }
+          },
+          "required": [
+            "loc",
+            "msg",
+            "type"
+          ],
+          "title": "ValidationError",
           "type": "object"
         }
       },
@@ -880,6 +1481,535 @@
           "summary": "Answer from a tenant-owned knowledge base",
           "tags": [
             "answers"
+          ]
+        }
+      },
+      "/v1/applications": {
+        "get": {
+          "operationId": "list_applications_v1_applications_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "project_id",
+              "required": true,
+              "schema": {
+                "title": "Project Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 50,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ApplicationListResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "List Applications",
+          "tags": [
+            "applications"
+          ]
+        },
+        "post": {
+          "operationId": "create_application_v1_applications_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationCreatePayload"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ApplicationResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "Create Application",
+          "tags": [
+            "applications"
+          ]
+        }
+      },
+      "/v1/applications/{application_id}": {
+        "get": {
+          "operationId": "get_application_v1_applications__application_id__get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "application_id",
+              "required": true,
+              "schema": {
+                "title": "Application Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ApplicationResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "Get Application",
+          "tags": [
+            "applications"
+          ]
+        }
+      },
+      "/v1/applications/{application_id}/deployments": {
+        "get": {
+          "operationId": "list_deployments_v1_applications__application_id__deployments_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "application_id",
+              "required": true,
+              "schema": {
+                "title": "Application Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 50,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/DeploymentListResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "List Deployments",
+          "tags": [
+            "applications"
+          ]
+        },
+        "post": {
+          "operationId": "create_deployment_v1_applications__application_id__deployments_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "application_id",
+              "required": true,
+              "schema": {
+                "title": "Application Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentCreatePayload"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/DeploymentResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "Create Deployment",
+          "tags": [
+            "applications"
+          ]
+        }
+      },
+      "/v1/applications/{application_id}/revisions": {
+        "get": {
+          "operationId": "list_revisions_v1_applications__application_id__revisions_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "application_id",
+              "required": true,
+              "schema": {
+                "title": "Application Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 50,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/RevisionListResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "List Revisions",
+          "tags": [
+            "applications"
+          ]
+        },
+        "post": {
+          "operationId": "create_revision_v1_applications__application_id__revisions_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "application_id",
+              "required": true,
+              "schema": {
+                "title": "Application Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevisionCreatePayload"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/RevisionResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "Create Revision",
+          "tags": [
+            "applications"
+          ]
+        }
+      },
+      "/v1/apps/{application_id}/answer": {
+        "post": {
+          "operationId": "answer_application_v1_apps__application_id__answer_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "application_id",
+              "required": true,
+              "schema": {
+                "title": "Application Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfiguredApplicationAnswerPayload"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ApplicationAnswerResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "401": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Unauthorized"
+            },
+            "403": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Forbidden"
+            },
+            "404": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Not Found"
+            },
+            "409": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Conflict"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Unprocessable Entity"
+            },
+            "429": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Too Many Requests"
+            },
+            "500": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Internal Server Error"
+            },
+            "503": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              },
+              "description": "Service Unavailable"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "Answer through a published application revision",
+          "tags": [
+            "applications"
           ]
         }
       },
@@ -1730,6 +2860,156 @@
           "summary": "Delete one conversation session",
           "tags": [
             "sessions"
+          ]
+        }
+      },
+      "/v1/projects": {
+        "get": {
+          "operationId": "list_projects_v1_projects_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 50,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ProjectListResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "List Projects",
+          "tags": [
+            "applications"
+          ]
+        },
+        "post": {
+          "operationId": "create_project_v1_projects_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectCreatePayload"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ProjectResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "Create Project",
+          "tags": [
+            "applications"
+          ]
+        }
+      },
+      "/v1/projects/{project_id}": {
+        "get": {
+          "operationId": "get_project_v1_projects__project_id__get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "project_id",
+              "required": true,
+              "schema": {
+                "title": "Project Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ProjectResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "Get Project",
+          "tags": [
+            "applications"
           ]
         }
       }
