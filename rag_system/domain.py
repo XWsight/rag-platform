@@ -104,6 +104,8 @@ class AnswerRequest:
     allow_cloud: bool = False
     allow_web: bool = False
     deep_research: bool = False
+    require_citations: bool = True
+    retrieval_profile: str = "default"
 
 
 @dataclass(frozen=True, slots=True)

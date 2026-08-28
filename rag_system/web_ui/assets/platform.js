@@ -52,7 +52,7 @@ async function renderApplications() {
         const rollback = document.createElement("button"); rollback.className = "secondary-button";
         rollback.textContent = `发布 v${revision.revision_number}`;
         rollback.addEventListener("click", async () => {
-          await api(`/v1/applications/${application.id}/deployments`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({revision_id: revision.id})});
+          await api(`/v1/applications/${application.id}/deployments`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({revision_id: revision.id, expected_active_revision_id: application.active_revision_id})});
           await refresh();
         });
         entry.append(rollback);
@@ -72,8 +72,9 @@ async function createAndPublish(event) {
     let project = state.projects[0];
     if (!project) project = await api("/v1/projects", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({display_name: "Default", description: "Default application project"})});
     const application = await api("/v1/applications", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({project_id: project.id, display_name: byId("application-name").value, application_kind: "knowledge_chat"})});
-    const revision = await api(`/v1/applications/${application.id}/revisions`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({knowledge_base_ids: [byId("application-kb").value], answer_policy: {require_citations: true, allow_cloud: byId("application-cloud").checked, allow_web: false, allow_research: false}, session_policy: {enabled: true, ttl_seconds: 3600}, change_summary: "Initial release"})});
-    await api(`/v1/applications/${application.id}/deployments`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({revision_id: revision.id})});
+    const draft = await api(`/v1/applications/${application.id}/draft`, {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify({expected_version: 0, knowledge_base_ids: [byId("application-kb").value], retrieval_profile: "default", answer_policy: {require_citations: true, allow_cloud: byId("application-cloud").checked, allow_web: false, allow_research: false}, session_policy: {enabled: true, ttl_seconds: 3600}, change_summary: "Initial release"})});
+    const revision = await api(`/v1/applications/${application.id}/draft/revisions`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({expected_version: draft.version})});
+    await api(`/v1/applications/${application.id}/deployments`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({revision_id: revision.id, expected_active_revision_id: application.active_revision_id})});
     await refresh();
   } catch (error) { byId("application-error").textContent = error.message; }
 }

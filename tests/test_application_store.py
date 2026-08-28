@@ -197,7 +197,7 @@ class ApplicationStoreTests(unittest.TestCase):
         with closing(sqlite3.connect(self.database)) as connection:
             self.assertEqual(connection.execute("PRAGMA journal_mode").fetchone()[0].lower(), "wal")
             self.assertEqual(connection.execute("PRAGMA foreign_keys").fetchone()[0], 0)
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 4)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 5)
         project = self.project()
         self.store.create_project(self.tenant_a, project)
         with self.assertRaises(ApplicationStoreStorageError):
@@ -220,6 +220,7 @@ class ApplicationStoreTests(unittest.TestCase):
                 "UPDATE application_revisions SET configuration_json = ? WHERE revision_id = ?",
                 (json.dumps(payload, separators=(",", ":"), sort_keys=True), revision.revision_id),
             )
+            connection.execute("DROP TABLE application_drafts")
             connection.execute("PRAGMA user_version = 1")
             connection.commit()
 
@@ -231,7 +232,21 @@ class ApplicationStoreTests(unittest.TestCase):
             ).configuration.answer_policy.allow_cloud
         )
         with closing(sqlite3.connect(self.database)) as connection:
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 4)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 5)
+
+    def test_schema_migrates_v4_records_to_an_empty_draft(self) -> None:
+        project = self.store.create_project(self.tenant_a, self.project())
+        application = self.store.create_application(self.tenant_a, self.application(project))
+        with closing(sqlite3.connect(self.database)) as connection:
+            connection.execute("DROP TABLE application_drafts")
+            connection.execute("PRAGMA user_version = 4")
+            connection.commit()
+
+        migrated = ApplicationStore(self.database)
+
+        draft = migrated.get_draft(self.tenant_a, application.application_id)
+        self.assertEqual(draft.version, 0)
+        self.assertIsNone(draft.configuration)
 
     def test_schema_rejects_a_missing_custom_index_without_rewriting_data(self) -> None:
         with closing(sqlite3.connect(self.database)) as connection:

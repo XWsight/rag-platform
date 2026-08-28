@@ -17,6 +17,7 @@ from rag_system.application_service import (
     ApplicationServiceValidationError,
 )
 from rag_system.application_store import ApplicationStore
+from rag_system.application_store import ApplicationDraftConflictError
 from rag_system.knowledge_base_contracts import KnowledgeBaseStatus
 from rag_system.tenancy import Principal, TenantId
 
@@ -40,7 +41,7 @@ class ApplicationServiceTests(unittest.TestCase):
         self.addCleanup(self.directory.cleanup)
         self.store = ApplicationStore(Path(self.directory.name, "applications.sqlite3"))
         self.writer = Principal(
-            "writer-user", TenantId("tenant-a"), frozenset({"writer", "operator"})
+            "writer-user", TenantId("tenant-a"), frozenset({"reader", "writer", "operator"})
         )
         self.reader = Principal("reader-user", TenantId("tenant-a"), frozenset({"reader"}))
         self.knowledge_bases = KnowledgeBaseStub(KnowledgeBaseStatus.READY)
@@ -136,6 +137,36 @@ class ApplicationServiceTests(unittest.TestCase):
             self.service.publish(
                 self.writer, application.application_id, revision.revision_id
             )
+
+    def test_draft_is_editable_then_snapshotted_as_an_immutable_revision(self) -> None:
+        project = self.service.create_project(self.writer, "Support")
+        application = self.service.create_knowledge_application(
+            self.writer, project.project_id, "Support assistant"
+        )
+        initial = self.service.get_draft(self.writer, application.application_id)
+        self.assertEqual(initial.version, 0)
+        self.assertIsNone(initial.configuration)
+        configured = self.service.update_knowledge_draft(
+            self.writer,
+            application.application_id,
+            KnowledgeChatConfiguration(knowledge_base_ids=(KNOWLEDGE_BASE_ID,)),
+            expected_version=0,
+            change_summary="Prepared for release",
+        )
+        self.assertEqual(configured.version, 1)
+        with self.assertRaises(ApplicationDraftConflictError):
+            self.service.update_knowledge_draft(
+                self.writer,
+                application.application_id,
+                KnowledgeChatConfiguration(knowledge_base_ids=(KNOWLEDGE_BASE_ID,)),
+                expected_version=0,
+                change_summary="Stale update",
+            )
+        revision = self.service.create_revision_from_draft(
+            self.writer, application.application_id, expected_version=1
+        )
+        self.assertEqual(revision.change_summary, "Prepared for release")
+        self.assertEqual(revision.configuration, configured.configuration)
 
 
 if __name__ == "__main__":

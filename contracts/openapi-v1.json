@@ -13,7 +13,6 @@
                 "type": "string"
               },
               "maxItems": 24,
-              "minItems": 1,
               "title": "Citation Ids",
               "type": "array"
             },
@@ -450,13 +449,25 @@
         "DeploymentCreatePayload": {
           "additionalProperties": false,
           "properties": {
+            "expected_active_revision_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expected Active Revision Id"
+            },
             "revision_id": {
               "title": "Revision Id",
               "type": "string"
             }
           },
           "required": [
-            "revision_id"
+            "revision_id",
+            "expected_active_revision_id"
           ],
           "title": "DeploymentCreatePayload",
           "type": "object"
@@ -557,6 +568,155 @@
             "sha256"
           ],
           "title": "DocumentResponse",
+          "type": "object"
+        },
+        "DraftResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "answer_policy": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/AnswerPolicyPayload"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "application_id": {
+              "title": "Application Id",
+              "type": "string"
+            },
+            "change_summary": {
+              "title": "Change Summary",
+              "type": "string"
+            },
+            "configured": {
+              "title": "Configured",
+              "type": "boolean"
+            },
+            "knowledge_base_ids": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Knowledge Base Ids",
+              "type": "array"
+            },
+            "retrieval_profile": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/RetrievalProfile"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "session_policy": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/SessionPolicyPayload"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "updated_at": {
+              "title": "Updated At",
+              "type": "number"
+            },
+            "updated_by": {
+              "title": "Updated By",
+              "type": "string"
+            },
+            "version": {
+              "minimum": 0.0,
+              "title": "Version",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "application_id",
+            "version",
+            "configured",
+            "updated_at",
+            "updated_by",
+            "change_summary"
+          ],
+          "title": "DraftResponse",
+          "type": "object"
+        },
+        "DraftRevisionCreatePayload": {
+          "additionalProperties": false,
+          "properties": {
+            "expected_version": {
+              "minimum": 1.0,
+              "title": "Expected Version",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "expected_version"
+          ],
+          "title": "DraftRevisionCreatePayload",
+          "type": "object"
+        },
+        "DraftUpdatePayload": {
+          "additionalProperties": false,
+          "properties": {
+            "answer_policy": {
+              "$ref": "#/components/schemas/AnswerPolicyPayload",
+              "default": {
+                "allow_cloud": false,
+                "allow_research": false,
+                "allow_web": false,
+                "require_citations": true
+              }
+            },
+            "change_summary": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Change Summary",
+              "type": "string"
+            },
+            "expected_version": {
+              "minimum": 0.0,
+              "title": "Expected Version",
+              "type": "integer"
+            },
+            "knowledge_base_ids": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 32,
+              "minItems": 1,
+              "title": "Knowledge Base Ids",
+              "type": "array"
+            },
+            "retrieval_profile": {
+              "default": "default",
+              "enum": [
+                "default",
+                "focused"
+              ],
+              "title": "Retrieval Profile",
+              "type": "string"
+            },
+            "session_policy": {
+              "$ref": "#/components/schemas/SessionPolicyPayload",
+              "default": {
+                "enabled": true
+              }
+            }
+          },
+          "required": [
+            "expected_version",
+            "knowledge_base_ids",
+            "change_summary"
+          ],
+          "title": "DraftUpdatePayload",
           "type": "object"
         },
         "ErrorDetail": {
@@ -983,7 +1143,8 @@
         "RetrievalProfile": {
           "description": "Named retrieval contracts supported by the current application runtime.",
           "enum": [
-            "default"
+            "default",
+            "focused"
           ],
           "title": "RetrievalProfile",
           "type": "string"
@@ -1016,8 +1177,13 @@
               "type": "array"
             },
             "retrieval_profile": {
-              "$ref": "#/components/schemas/RetrievalProfile",
-              "default": "default"
+              "default": "default",
+              "enum": [
+                "default",
+                "focused"
+              ],
+              "title": "Retrieval Profile",
+              "type": "string"
             },
             "session_policy": {
               "$ref": "#/components/schemas/SessionPolicyPayload",
@@ -1822,6 +1988,174 @@
             }
           ],
           "summary": "Create Deployment",
+          "tags": [
+            "applications"
+          ]
+        }
+      },
+      "/v1/applications/{application_id}/draft": {
+        "get": {
+          "operationId": "get_draft_v1_applications__application_id__draft_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "application_id",
+              "required": true,
+              "schema": {
+                "title": "Application Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/DraftResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "Get Draft",
+          "tags": [
+            "applications"
+          ]
+        },
+        "put": {
+          "operationId": "update_draft_v1_applications__application_id__draft_put",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "application_id",
+              "required": true,
+              "schema": {
+                "title": "Application Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftUpdatePayload"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/DraftResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "Update Draft",
+          "tags": [
+            "applications"
+          ]
+        }
+      },
+      "/v1/applications/{application_id}/draft/revisions": {
+        "post": {
+          "operationId": "create_revision_from_draft_v1_applications__application_id__draft_revisions_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "application_id",
+              "required": true,
+              "schema": {
+                "title": "Application Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftRevisionCreatePayload"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/RevisionResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "Create Revision From Draft",
           "tags": [
             "applications"
           ]

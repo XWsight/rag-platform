@@ -78,7 +78,7 @@ class ApplicationApiTests(unittest.TestCase):
         second = self._create_revision(application_id, "Cloud enabled", allow_cloud=True)
         published = self.client.post(
             f"/v1/applications/{application_id}/deployments", headers=self.headers,
-            json={"revision_id": second},
+            json={"revision_id": second, "expected_active_revision_id": None},
         )
         self.assertEqual(published.status_code, 200)
         answer = self.client.post(
@@ -93,7 +93,7 @@ class ApplicationApiTests(unittest.TestCase):
 
         rolled_back = self.client.post(
             f"/v1/applications/{application_id}/deployments", headers=self.headers,
-            json={"revision_id": first},
+            json={"revision_id": first, "expected_active_revision_id": second},
         )
         self.assertEqual(rolled_back.status_code, 200)
         active = self.client.get(f"/v1/applications/{application_id}", headers=self.headers)
@@ -126,6 +126,48 @@ class ApplicationApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()["error"]["code"], "invalid_request")
+
+    def test_draft_update_snapshot_and_publish_conflict_are_explicit(self) -> None:
+        project = self.client.post(
+            "/v1/projects", headers=self.headers, json={"display_name": "Support"}
+        ).json()
+        application = self.client.post(
+            "/v1/applications",
+            headers=self.headers,
+            json={"project_id": project["id"], "display_name": "Support", "application_kind": "knowledge_chat"},
+        ).json()
+        draft_path = f"/v1/applications/{application['id']}/draft"
+        self.assertEqual(self.client.get(draft_path, headers=self.headers).json()["version"], 0)
+        updated = self.client.put(
+            draft_path,
+            headers=self.headers,
+            json={
+                "expected_version": 0,
+                "knowledge_base_ids": [KNOWLEDGE_BASE_ID],
+                "retrieval_profile": "focused",
+                "answer_policy": {"require_citations": False, "allow_cloud": True, "allow_web": False, "allow_research": False},
+                "session_policy": {"enabled": True, "ttl_seconds": 3600},
+                "change_summary": "Prepared release",
+            },
+        )
+        self.assertEqual(updated.status_code, 200, updated.text)
+        revision = self.client.post(
+            f"{draft_path}/revisions", headers=self.headers, json={"expected_version": 1}
+        )
+        self.assertEqual(revision.status_code, 200, revision.text)
+        first = self.client.post(
+            f"/v1/applications/{application['id']}/deployments",
+            headers=self.headers,
+            json={"revision_id": revision.json()["id"], "expected_active_revision_id": None},
+        )
+        self.assertEqual(first.status_code, 200)
+        stale = self.client.post(
+            f"/v1/applications/{application['id']}/deployments",
+            headers=self.headers,
+            json={"revision_id": revision.json()["id"], "expected_active_revision_id": None},
+        )
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.json()["error"]["code"], "application_conflict")
 
     def _create_revision(self, application_id: str, summary: str, *, allow_cloud: bool) -> str:
         response = self.client.post(

@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from rag_system.application_contracts import (
     Application,
+    ApplicationDraft,
     ApplicationKind,
     ApplicationRevision,
     ApplicationStatus,
@@ -134,10 +135,7 @@ class CitationResponse(StrictModel):
 
 class AnswerClaimResponse(StrictModel):
     text: str = Field(min_length=1, max_length=MAX_CLAIM_CHARACTERS)
-    citation_ids: tuple[CitationId, ...] = Field(
-        min_length=1,
-        max_length=MAX_ANSWER_CLAIMS,
-    )
+    citation_ids: tuple[CitationId, ...] = Field(max_length=MAX_ANSWER_CLAIMS)
 
 
 class AnswerResponse(StrictModel):
@@ -213,10 +211,36 @@ class SessionPolicyPayload(StrictModel):
 
 class RevisionCreatePayload(StrictModel):
     knowledge_base_ids: list[str] = Field(min_length=1, max_length=32)
-    retrieval_profile: RetrievalProfile = RetrievalProfile.DEFAULT
+    retrieval_profile: Literal["default", "focused"] = "default"
     answer_policy: AnswerPolicyPayload = AnswerPolicyPayload()
     session_policy: SessionPolicyPayload = SessionPolicyPayload()
     change_summary: str = Field(min_length=1, max_length=500)
+
+
+class DraftUpdatePayload(StrictModel):
+    expected_version: int = Field(ge=0)
+    knowledge_base_ids: list[str] = Field(min_length=1, max_length=32)
+    retrieval_profile: Literal["default", "focused"] = "default"
+    answer_policy: AnswerPolicyPayload = AnswerPolicyPayload()
+    session_policy: SessionPolicyPayload = SessionPolicyPayload()
+    change_summary: str = Field(min_length=1, max_length=500)
+
+
+class DraftRevisionCreatePayload(StrictModel):
+    expected_version: int = Field(ge=1)
+
+
+class DraftResponse(StrictModel):
+    application_id: str
+    version: int = Field(ge=0)
+    configured: bool
+    knowledge_base_ids: tuple[str, ...] = ()
+    retrieval_profile: RetrievalProfile | None = None
+    answer_policy: AnswerPolicyPayload | None = None
+    session_policy: SessionPolicyPayload | None = None
+    updated_at: float
+    updated_by: str
+    change_summary: str
 
 
 class RevisionResponse(StrictModel):
@@ -240,6 +264,7 @@ class RevisionListResponse(StrictModel):
 
 class DeploymentCreatePayload(StrictModel):
     revision_id: str
+    expected_active_revision_id: str | None
 
 
 class DeploymentResponse(StrictModel):
@@ -301,6 +326,38 @@ def revision_response(revision: ApplicationRevision) -> RevisionResponse:
         created_at=revision.created_at,
         created_by=revision.created_by,
         change_summary=revision.change_summary,
+    )
+
+
+def draft_response(draft: ApplicationDraft) -> DraftResponse:
+    configuration = draft.configuration
+    if configuration is None:
+        return DraftResponse(
+            application_id=draft.application_id,
+            version=draft.version,
+            configured=False,
+            updated_at=draft.updated_at,
+            updated_by=draft.updated_by,
+            change_summary=draft.change_summary,
+        )
+    policy = configuration.answer_policy
+    session = configuration.session_policy
+    return DraftResponse(
+        application_id=draft.application_id,
+        version=draft.version,
+        configured=True,
+        knowledge_base_ids=configuration.knowledge_base_ids,
+        retrieval_profile=configuration.retrieval_profile,
+        answer_policy=AnswerPolicyPayload(
+            require_citations=policy.require_citations,
+            allow_cloud=policy.allow_cloud,
+            allow_web=policy.allow_web,
+            allow_research=policy.allow_research,
+        ),
+        session_policy=SessionPolicyPayload(enabled=session.enabled, ttl_seconds=session.ttl_seconds),
+        updated_at=draft.updated_at,
+        updated_by=draft.updated_by,
+        change_summary=draft.change_summary,
     )
 
 
@@ -397,6 +454,9 @@ __all__ = [
     "SessionPolicyPayload",
     "DeleteResponse",
     "DocumentResponse",
+    "DraftResponse",
+    "DraftRevisionCreatePayload",
+    "DraftUpdatePayload",
     "ErrorDetail",
     "ErrorEnvelope",
     "HealthResponse",
@@ -409,6 +469,7 @@ __all__ = [
     "answer_response",
     "application_response",
     "deployment_response",
+    "draft_response",
     "project_response",
     "revision_response",
     "job_response",

@@ -107,6 +107,11 @@ class RagService:
             raise ValueError("index_ids has an invalid item count")
         if len(set(normalized_index_ids)) != len(normalized_index_ids):
             raise ValueError("index_ids cannot contain duplicates")
+        if request.retrieval_profile not in {"default", "focused"}:
+            raise ValueError("retrieval_profile is unsupported")
+        evidence_count = (
+            1 if request.retrieval_profile == "focused" else self.settings.final_evidence_count
+        )
         started = self.timer()
         trace_id = uuid4().hex[:16]
         question = (request.question or "").strip()
@@ -127,7 +132,10 @@ class RagService:
                 )
                 rankings = {
                     f"index-{index}": self._retrieve_queries(
-                        retriever, retrieval_queries, deep_research=request.deep_research
+                        retriever,
+                        retrieval_queries,
+                        deep_research=request.deep_research,
+                        evidence_count=evidence_count,
                     )
                     for index, retriever in enumerate(retrievers, start=1)
                 }
@@ -135,7 +143,7 @@ class RagService:
                     next(iter(rankings.values()))
                     if len(rankings) == 1
                     else self._fuse_index_hits(
-                        tuple(rankings.values()), top_k=self.settings.final_evidence_count
+                        tuple(rankings.values()), top_k=evidence_count
                     )
                 )
         except ProviderError as error:
@@ -245,7 +253,11 @@ class RagService:
             try:
                 generated_answer = self.chat_model.answer(question, evidence)
                 allowed_ids = tuple(citation.citation_id for citation in citations)
-                grounding_audit = validate_grounded_answer(generated_answer, allowed_ids)
+                grounding_audit = validate_grounded_answer(
+                    generated_answer,
+                    allowed_ids,
+                    require_citations=request.require_citations,
+                )
                 answer = render_grounded_answer(generated_answer)
                 claims = generated_answer.claims
                 grounding_claim_count = grounding_audit.claim_count
@@ -285,7 +297,9 @@ class RagService:
                 "evidence_count": len(evidence),
                 "grounded_claim_count": grounding_claim_count,
                 "grounding_citation_count": grounding_citation_count,
-                "citation_completeness": 1.0 if claims else 0.0,
+                "citation_completeness": (
+                    1.0 if claims and request.require_citations else 0.0
+                ),
                 "web_error": web_error,
                 "web_error_count": web_error_count,
                 "web_error_counts": self._error_counts_diagnostic(web_errors),
@@ -331,21 +345,22 @@ class RagService:
         queries: Sequence[str],
         *,
         deep_research: bool,
+        evidence_count: int,
     ) -> tuple[SearchHit, ...]:
         if not deep_research or len(queries) == 1:
             return tuple(
                 retriever.search(
                     queries[0],
-                    top_k=self.settings.final_evidence_count,
+                    top_k=evidence_count,
                 )
             )
         rankings = {
             f"query-{index}": tuple(
-                retriever.search(query, top_k=self.settings.final_evidence_count)
+                retriever.search(query, top_k=evidence_count)
             )
             for index, query in enumerate(queries, start=1)
         }
-        return fuse_query_hits(rankings, top_k=self.settings.final_evidence_count)
+        return fuse_query_hits(rankings, top_k=evidence_count)
 
     @staticmethod
     def _fuse_index_hits(

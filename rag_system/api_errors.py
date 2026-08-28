@@ -25,6 +25,8 @@ from rag_system.application_service import (
 )
 from rag_system.application_store import (
     ApplicationRevisionUnavailableError,
+    ApplicationDraftConflictError,
+    ApplicationPublishConflictError,
     ApplicationStoreSchemaError,
     ApplicationStoreStorageError,
     ApplicationUnavailableError,
@@ -136,6 +138,8 @@ def classify_application_error(error: Exception) -> tuple[int, str, str]:
         return 409, "idempotency_in_progress", "The matching request is still in progress."
     if isinstance(error, ApplicationNotPublishedError):
         return 409, "application_not_published", "The application is not published."
+    if isinstance(error, (ApplicationDraftConflictError, ApplicationPublishConflictError)):
+        return 409, "application_conflict", "The application changed; refresh and retry."
     if isinstance(error, (DuplicateResourceError, InvalidStatusTransitionError)):
         return 409, "resource_conflict", "The resource cannot be changed in its current state."
     if isinstance(error, KnowledgeBaseNotReadyError):
