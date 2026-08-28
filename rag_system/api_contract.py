@@ -12,11 +12,16 @@ from rag_system.application_contracts import (
     ApplicationKind,
     ApplicationRevision,
     ApplicationStatus,
+    AuditEvent,
     Deployment,
     DeploymentEnvironment,
     Project,
+    ResourceAccessMode,
+    ResourceBinding,
+    ResourceKind,
     RetrievalProfile,
 )
+from rag_system.application_evaluation import ApplicationEvaluationReport
 from rag_system.domain import AnswerClaim, AnswerResult, Citation, Route
 from rag_system.grounding import (
     CITATION_ID_PATTERN,
@@ -211,6 +216,7 @@ class SessionPolicyPayload(StrictModel):
 
 class RevisionCreatePayload(StrictModel):
     knowledge_base_ids: list[str] = Field(min_length=1, max_length=32)
+    model_profile_id: str = Field(default="default", min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_-]{0,63}$")
     retrieval_profile: Literal["default", "focused"] = "default"
     answer_policy: AnswerPolicyPayload = AnswerPolicyPayload()
     session_policy: SessionPolicyPayload = SessionPolicyPayload()
@@ -220,6 +226,7 @@ class RevisionCreatePayload(StrictModel):
 class DraftUpdatePayload(StrictModel):
     expected_version: int = Field(ge=0)
     knowledge_base_ids: list[str] = Field(min_length=1, max_length=32)
+    model_profile_id: str = Field(default="default", min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_-]{0,63}$")
     retrieval_profile: Literal["default", "focused"] = "default"
     answer_policy: AnswerPolicyPayload = AnswerPolicyPayload()
     session_policy: SessionPolicyPayload = SessionPolicyPayload()
@@ -235,6 +242,7 @@ class DraftResponse(StrictModel):
     version: int = Field(ge=0)
     configured: bool
     knowledge_base_ids: tuple[str, ...] = ()
+    model_profile_id: str | None = None
     retrieval_profile: RetrievalProfile | None = None
     answer_policy: AnswerPolicyPayload | None = None
     session_policy: SessionPolicyPayload | None = None
@@ -249,6 +257,7 @@ class RevisionResponse(StrictModel):
     revision_number: int = Field(ge=1)
     configuration_schema_version: int = Field(ge=1)
     knowledge_base_ids: tuple[str, ...]
+    model_profile_id: str
     retrieval_profile: RetrievalProfile
     answer_policy: AnswerPolicyPayload
     session_policy: SessionPolicyPayload
@@ -278,6 +287,51 @@ class DeploymentResponse(StrictModel):
 
 class DeploymentListResponse(StrictModel):
     items: tuple[DeploymentResponse, ...]
+    count: int = Field(ge=0)
+
+
+class ResourceBindingResponse(StrictModel):
+    id: str
+    application_id: str
+    revision_id: str
+    resource_kind: ResourceKind
+    resource_id: str
+    access_mode: ResourceAccessMode
+    created_at: float
+
+
+class ResourceBindingListResponse(StrictModel):
+    items: tuple[ResourceBindingResponse, ...]
+    count: int = Field(ge=0)
+
+
+class AuditEventResponse(StrictModel):
+    id: str
+    event_type: str
+    occurred_at: float
+    actor: str
+    summary: str
+    project_id: str | None
+    application_id: str | None
+    revision_id: str | None
+
+
+class AuditEventListResponse(StrictModel):
+    items: tuple[AuditEventResponse, ...]
+    count: int = Field(ge=0)
+
+
+class ApplicationEvaluationResponse(StrictModel):
+    application_id: str
+    revision_id: str
+    revision_number: int = Field(ge=1)
+    configuration_digest: str = Field(min_length=64, max_length=64)
+    generated_at: float = Field(ge=0)
+    benchmark: dict[str, Any]
+
+
+class ApplicationEvaluationListResponse(StrictModel):
+    items: tuple[ApplicationEvaluationResponse, ...]
     count: int = Field(ge=0)
 
 
@@ -313,6 +367,7 @@ def revision_response(revision: ApplicationRevision) -> RevisionResponse:
         revision_number=revision.revision_number,
         configuration_schema_version=revision.configuration_schema_version,
         knowledge_base_ids=revision.configuration.knowledge_base_ids,
+        model_profile_id=revision.configuration.model_profile_id,
         retrieval_profile=revision.configuration.retrieval_profile,
         answer_policy=AnswerPolicyPayload(
             require_citations=policy.require_citations,
@@ -347,6 +402,7 @@ def draft_response(draft: ApplicationDraft) -> DraftResponse:
         version=draft.version,
         configured=True,
         knowledge_base_ids=configuration.knowledge_base_ids,
+        model_profile_id=configuration.model_profile_id,
         retrieval_profile=configuration.retrieval_profile,
         answer_policy=AnswerPolicyPayload(
             require_citations=policy.require_citations,
@@ -369,6 +425,45 @@ def deployment_response(deployment: Deployment) -> DeploymentResponse:
         environment=deployment.environment,
         deployed_at=deployment.deployed_at,
         deployed_by=deployment.deployed_by,
+    )
+
+
+def binding_response(binding: ResourceBinding) -> ResourceBindingResponse:
+    return ResourceBindingResponse(
+        id=binding.binding_id,
+        application_id=binding.application_id,
+        revision_id=binding.revision_id,
+        resource_kind=binding.resource_kind,
+        resource_id=binding.resource_id,
+        access_mode=binding.access_mode,
+        created_at=binding.created_at,
+    )
+
+
+def audit_event_response(event: AuditEvent) -> AuditEventResponse:
+    return AuditEventResponse(
+        id=event.audit_event_id,
+        event_type=event.event_type.value,
+        occurred_at=event.occurred_at,
+        actor=event.actor,
+        summary=event.summary,
+        project_id=event.project_id,
+        application_id=event.application_id,
+        revision_id=event.revision_id,
+    )
+
+
+def application_evaluation_response(
+    report: ApplicationEvaluationReport,
+) -> ApplicationEvaluationResponse:
+    payload = report.to_dict()
+    return ApplicationEvaluationResponse(
+        application_id=report.application_id,
+        revision_id=report.revision_id,
+        revision_number=report.revision_number,
+        configuration_digest=report.configuration_digest,
+        generated_at=report.generated_at,
+        benchmark=payload["benchmark"],
     )
 
 
@@ -438,9 +533,13 @@ __all__ = [
     "AnswerResponse",
     "ApplicationAnswerPayload",
     "ApplicationAnswerResponse",
+    "ApplicationEvaluationListResponse",
+    "ApplicationEvaluationResponse",
     "ApplicationCreatePayload",
     "ApplicationListResponse",
     "ApplicationResponse",
+    "AuditEventListResponse",
+    "AuditEventResponse",
     "AnswerPolicyPayload",
     "DeploymentCreatePayload",
     "DeploymentListResponse",
@@ -451,6 +550,8 @@ __all__ = [
     "RevisionCreatePayload",
     "RevisionListResponse",
     "RevisionResponse",
+    "ResourceBindingListResponse",
+    "ResourceBindingResponse",
     "SessionPolicyPayload",
     "DeleteResponse",
     "DocumentResponse",
@@ -467,7 +568,10 @@ __all__ = [
     "RESOURCE_PATTERN",
     "SESSION_PATTERN",
     "answer_response",
+    "application_evaluation_response",
     "application_response",
+    "audit_event_response",
+    "binding_response",
     "deployment_response",
     "draft_response",
     "project_response",

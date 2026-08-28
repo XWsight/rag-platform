@@ -15,6 +15,7 @@ from rag_system.application_contracts import (
     Project,
     ResourceBinding,
 )
+from rag_system.application_evaluation import ApplicationEvaluationReport
 from rag_system.knowledge_base_contracts import (
     DocumentManifest,
     KnowledgeBaseErrorCode,
@@ -100,7 +101,17 @@ class ApplicationRepository(Protocol):
 
     def record_audit_event(self, principal: Principal, event: AuditEvent) -> AuditEvent: ...
 
-    def list_audit_events(self, principal: Principal, *, limit: int = 50) -> tuple[AuditEvent, ...]: ...
+    def list_audit_events(
+        self, principal: Principal, *, application_id: str | None = None, limit: int = 50
+    ) -> tuple[AuditEvent, ...]: ...
+
+    def save_evaluation(
+        self, principal: Principal, report: ApplicationEvaluationReport
+    ) -> ApplicationEvaluationReport: ...
+
+    def list_evaluations(
+        self, principal: Principal, application_id: str, revision_id: str, *, limit: int = 50
+    ) -> tuple[ApplicationEvaluationReport, ...]: ...
 
 
 class KnowledgeBaseRepository(Protocol):

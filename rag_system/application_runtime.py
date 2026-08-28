@@ -5,13 +5,17 @@ from __future__ import annotations
 import hashlib
 import time
 from collections import OrderedDict
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from threading import RLock
 from typing import Protocol
 
 from rag_system.application import RagApplication
-from rag_system.application_contracts import ApplicationStatus, KnowledgeChatConfiguration
+from rag_system.application_contracts import (
+    ApplicationStatus,
+    KnowledgeChatConfiguration,
+    validate_model_profile_id,
+)
 from rag_system.application_ports import ApplicationRepository
 from rag_system.domain import AnswerRequest, AnswerResult
 from rag_system.knowledge_base_contracts import KnowledgeBaseStatus
@@ -68,6 +72,7 @@ class KnowledgeApplicationRuntime:
         *,
         clock: Callable[[], float] = time.monotonic,
         max_tracked_sessions: int = 4_096,
+        trusted_model_profile_ids: Sequence[str] = ("default",),
     ) -> None:
         if not callable(clock):
             raise TypeError("clock must be callable")
@@ -77,6 +82,10 @@ class KnowledgeApplicationRuntime:
         self._rag = rag
         self._clock = clock
         self._max_tracked_sessions = max_tracked_sessions
+        profile_ids = tuple(validate_model_profile_id(value) for value in trusted_model_profile_ids)
+        if not profile_ids or len(set(profile_ids)) != len(profile_ids):
+            raise ValueError("trusted_model_profile_ids must contain unique profile IDs")
+        self._trusted_model_profile_ids = frozenset(profile_ids)
         self._session_accessed_at: OrderedDict[str, float] = OrderedDict()
         self._session_lock = RLock()
 
@@ -95,6 +104,8 @@ class KnowledgeApplicationRuntime:
             principal, application.application_id, application.active_revision_id
         )
         configuration = revision.configuration
+        if configuration.model_profile_id not in self._trusted_model_profile_ids:
+            raise ApplicationRuntimeValidationError("The model profile is unavailable.")
         resource_ids = self._resolve_bound_knowledge_bases(
             principal, application.application_id, revision.revision_id, configuration
         )

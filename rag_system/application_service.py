@@ -24,8 +24,10 @@ from rag_system.application_contracts import (
     ResourceBinding,
     ResourceKind,
     is_valid_timestamp,
+    validate_model_profile_id,
 )
 from rag_system.application_ports import ApplicationRepository, KnowledgeBaseRepository
+from rag_system.application_evaluation import ApplicationEvaluationReport, bind_application_evaluation
 from rag_system.knowledge_base_contracts import KnowledgeBaseStatus
 from rag_system.tenancy import Principal
 
@@ -66,12 +68,17 @@ class ApplicationService:
         knowledge_bases: KnowledgeBaseRepository,
         *,
         clock: Callable[[], float] = time.time,
+        trusted_model_profile_ids: Sequence[str] = ("default",),
     ) -> None:
         if not callable(clock):
             raise TypeError("clock must be callable")
         self._repository = repository
         self._knowledge_bases = knowledge_bases
         self._clock = clock
+        profile_ids = tuple(validate_model_profile_id(value) for value in trusted_model_profile_ids)
+        if not profile_ids or len(set(profile_ids)) != len(profile_ids):
+            raise ValueError("trusted_model_profile_ids must contain unique profile IDs")
+        self._trusted_model_profile_ids = frozenset(profile_ids)
 
     def create_project(
         self, principal: Principal, display_name: str, description: str = ""
@@ -186,6 +193,7 @@ class ApplicationService:
         application = self._repository.get_application(principal, application_id)
         if application.status is ApplicationStatus.ARCHIVED:
             raise ApplicationServiceValidationError("Archived applications cannot update drafts.")
+        self._verify_trusted_model_profile(configuration)
         self._verify_ready_knowledge_bases(principal, configuration.knowledge_base_ids)
         now = self._now()
         draft = ApplicationDraft(
@@ -246,6 +254,7 @@ class ApplicationService:
             )
         if application.application_kind is not ApplicationKind.KNOWLEDGE_CHAT:
             raise ApplicationServiceValidationError("Unsupported application kind.")
+        self._verify_trusted_model_profile(configuration)
         self._verify_ready_knowledge_bases(principal, configuration.knowledge_base_ids)
         now = self._now()
         revisions = self._repository.list_revisions(
@@ -302,6 +311,40 @@ class ApplicationService:
         _require_reader(principal)
         return self._repository.list_deployments(principal, application_id, limit=limit)
 
+    def list_bindings(
+        self, principal: Principal, application_id: str, revision_id: str
+    ) -> tuple[ResourceBinding, ...]:
+        _require_reader(principal)
+        return self._repository.list_bindings(principal, application_id, revision_id)
+
+    def list_audit_events(
+        self, principal: Principal, *, application_id: str | None = None, limit: int = 50
+    ) -> tuple[AuditEvent, ...]:
+        _require_reader(principal)
+        return self._repository.list_audit_events(
+            principal, application_id=application_id, limit=limit
+        )
+
+    def record_evaluation(
+        self, principal: Principal, report: ApplicationEvaluationReport
+    ) -> ApplicationEvaluationReport:
+        _require_writer(principal)
+        revision = self._repository.get_revision(
+            principal, report.application_id, report.revision_id
+        )
+        expected = bind_application_evaluation(
+            revision, report.benchmark, generated_at=report.generated_at
+        )
+        if expected.configuration_digest != report.configuration_digest:
+            raise ApplicationServiceValidationError("Evaluation does not match the immutable revision.")
+        return self._repository.save_evaluation(principal, report)
+
+    def list_evaluations(
+        self, principal: Principal, application_id: str, revision_id: str, *, limit: int = 50
+    ) -> tuple[ApplicationEvaluationReport, ...]:
+        _require_reader(principal)
+        return self._repository.list_evaluations(principal, application_id, revision_id, limit=limit)
+
     def publish(
         self,
         principal: Principal,
@@ -320,6 +363,7 @@ class ApplicationService:
                 "Archived applications cannot be published."
             )
         revision = self._repository.get_revision(principal, application.application_id, revision_id)
+        self._verify_trusted_model_profile(revision.configuration)
         self._verify_ready_knowledge_bases(principal, revision.configuration.knowledge_base_ids)
         now = self._now()
         deployment = Deployment(
@@ -378,6 +422,10 @@ class ApplicationService:
                 raise ApplicationResourceUnavailableError() from error
             if record.status is not KnowledgeBaseStatus.READY:
                 raise ApplicationResourceUnavailableError()
+
+    def _verify_trusted_model_profile(self, configuration: KnowledgeChatConfiguration) -> None:
+        if configuration.model_profile_id not in self._trusted_model_profile_ids:
+            raise ApplicationServiceValidationError("The model profile is not trusted by this deployment.")
 
     def _now(self) -> float:
         value = float(self._clock())

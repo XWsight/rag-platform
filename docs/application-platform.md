@@ -3,6 +3,9 @@
 第一阶段提供 `knowledge_chat` 应用内核。租户在 Project 中创建稳定 Application 身份，配置写入不可变
 Draft 可编辑并通过版本号进行乐观并发控制；Draft 快照为不可变 Revision，Deployment 原子切换生产 Revision；原有 `/v1/knowledge-bases` 和 `/v1/answers` 保持兼容。
 
+每个 Revision 都包含 `model_profile_id`，它只能引用部署启动时由 `RAG_MODEL_PROFILE_IDS`
+声明的受信任配置（默认仅 `default`）。它是不可解释的配置引用，不携带 Provider 地址、模型密钥或其他密钥材料；未知引用会在创建、发布和运行时被拒绝。
+
 ## 生命周期与权限
 
 | 操作 | API | 角色 | 持久化结果 |
@@ -12,6 +15,7 @@ Draft 可编辑并通过版本号进行乐观并发控制；Draft 快照为不�
 | 创建项目/应用/Revision | `POST /v1/projects`、`/v1/applications`、`.../revisions` | `writer` | 审计事件和不可变配置 |
 | 发布或回滚 | `POST .../deployments` | `operator` | 原子写 Deployment、审计事件与 active Revision |
 | 运行 | `POST /v1/apps/{id}/answer` | `reader` | 响应包含 application、Revision 与 trace |
+| 查询绑定、审计与评测 | `GET .../bindings`、`.../audit-events`、`.../evaluations` | `reader` | 只读发布证据与资源关系 |
 | 退役 | `DELETE /v1/applications/{id}` | `operator` | 状态变为 archived；保留 Revision、Deployment 与审计历史 |
 
 发布请求必须携带当前 `active_revision_id`（首次发布为 `null`）；陈旧请求返回 `409 application_conflict`，不会静默覆盖其他操作者的发布。应用只保存策略和平台资源 ID，不保存 Provider 密钥。知识库绑定在创建 Revision 和发布时必须属于同一
@@ -20,8 +24,8 @@ Draft 可编辑并通过版本号进行乐观并发控制；Draft 快照为不�
 
 ## 数据与迁移
 
-`/data/applications.sqlite3` 独立于 Catalog、jobs 与幂等仓储，使用 WAL、短事务和严格 schema。schema v5
-增加持久化 Draft 与 `retrieval_profile=default|focused`；v1 会依次补齐 `allow_cloud=false`、退役审计事件、检索策略和 Draft，再迁移到 v5。未知版本、表/索引损坏和无版本旧表
+`/data/applications.sqlite3` 独立于 Catalog、jobs 与幂等仓储，使用 WAL、短事务和严格 schema。schema v7
+增加持久化 Draft、`retrieval_profile=default|focused`、受信任模型配置引用和版本评测证据；v1 会依次补齐 `allow_cloud=false`、退役审计事件、检索策略、Draft、模型配置和评测表，再迁移到 v7。未知版本、表/索引损坏和无版本旧表
 均拒绝启动。升级前必须执行停写全卷快照；旧镜像不能直接打开迁移后的数据库，回滚必须恢复旧镜像和快照。
 
 ## 发布验证与评测
@@ -37,8 +41,8 @@ python scripts/verify_application_probe.py --base-url http://127.0.0.1:8000 \
 
 两个探针均只发送 GET，不执行回答或修改会话。评测发布候选时，用
 `bind_application_evaluation(revision, benchmark, generated_at=...)` 将现有结构化回答报告绑定到不可变
-Revision 和配置 SHA-256；报告不复制密钥或问题之外的部署配置。报告、源码提交、镜像 digest 和发布审批应
-作为同一个发布证据包保存。
+Revision 和配置 SHA-256；随后通过 `ApplicationService.record_evaluation(...)` 持久化，并由
+`GET /v1/applications/{application_id}/revisions/{revision_id}/evaluations` 读取。报告不复制密钥或问题之外的部署配置。报告、源码提交、镜像 digest 和发布审批应作为同一个发布证据包保存。
 
 ## 运维边界
 

@@ -30,17 +30,23 @@ from rag_system.application_contracts import (
     ResourceKind,
     RetrievalProfile,
     SessionPolicy,
+    DEFAULT_MODEL_PROFILE_ID,
     is_valid_timestamp,
     validate_application_id,
     validate_deployment_id,
     validate_project_id,
     validate_revision_id,
 )
+from rag_system.application_evaluation import (
+    MAX_EVALUATION_REPORT_BYTES,
+    ApplicationEvaluationError,
+    ApplicationEvaluationReport,
+)
 from rag_system.sqlite_support import SqliteDatabase
 from rag_system.tenancy import Principal, TenantId
 
 
-_SCHEMA_VERSION = 5
+_SCHEMA_VERSION = 7
 _MAX_LIST_LIMIT = 100
 _MAX_CONFIGURATION_BYTES = 64 * 1024
 _UNSET = object()
@@ -568,18 +574,76 @@ class ApplicationStore:
             self._insert_audit_event(connection, event)
         return event
 
-    def list_audit_events(self, principal: Principal, *, limit: int = 50) -> tuple[AuditEvent, ...]:
+    def list_audit_events(
+        self, principal: Principal, *, application_id: str | None = None, limit: int = 50
+    ) -> tuple[AuditEvent, ...]:
         tenant_id = _principal_tenant(principal)
         clean_limit = _validate_limit(limit)
+        clean_application_id = (
+            None if application_id is None else _safe_application_lookup_id(application_id)
+        )
         with self._read_connection() as connection:
-            rows = connection.execute(
-                """
-                SELECT * FROM application_audit_events WHERE tenant_id = ?
-                ORDER BY occurred_at DESC, rowid DESC LIMIT ?
-                """,
-                (tenant_id.value, clean_limit),
-            ).fetchall()
+            if clean_application_id is not None:
+                self._require_application(connection, tenant_id, clean_application_id)
+                query = (
+                    "SELECT * FROM application_audit_events WHERE tenant_id = ? "
+                    "AND application_id = ? ORDER BY occurred_at DESC, rowid DESC LIMIT ?"
+                )
+                parameters: tuple[object, ...] = (tenant_id.value, clean_application_id, clean_limit)
+            else:
+                query = (
+                    "SELECT * FROM application_audit_events WHERE tenant_id = ? "
+                    "ORDER BY occurred_at DESC, rowid DESC LIMIT ?"
+                )
+                parameters = (tenant_id.value, clean_limit)
+            rows = connection.execute(query, parameters).fetchall()
         return tuple(_audit_event_from_row(row) for row in rows)
+
+    def save_evaluation(
+        self, principal: Principal, report: ApplicationEvaluationReport
+    ) -> ApplicationEvaluationReport:
+        tenant_id = _principal_tenant(principal)
+        if not isinstance(report, ApplicationEvaluationReport):
+            raise ApplicationValidationError("evaluation report must use the typed contract.")
+        encoded = report.to_json()
+        if len(encoded.encode("utf-8")) > MAX_EVALUATION_REPORT_BYTES:
+            raise ApplicationValidationError("evaluation report exceeds the size limit.")
+        with self._write_lock, self._write_transaction() as connection:
+            revision = self._select_revision(
+                connection, tenant_id, report.application_id, report.revision_id
+            )
+            if revision is None or int(revision["revision_number"]) != report.revision_number:
+                raise ApplicationRevisionUnavailableError()
+            try:
+                connection.execute(
+                    """INSERT INTO application_evaluations (
+                    revision_id, generated_at, configuration_digest, report_json
+                    ) VALUES (?, ?, ?, ?)""",
+                    (report.revision_id, report.generated_at, report.configuration_digest, encoded),
+                )
+            except sqlite3.IntegrityError as error:
+                raise ApplicationStoreStorageError() from error
+        return report
+
+    def list_evaluations(
+        self, principal: Principal, application_id: str, revision_id: str, *, limit: int = 50
+    ) -> tuple[ApplicationEvaluationReport, ...]:
+        tenant_id = _principal_tenant(principal)
+        clean_application_id = _safe_application_lookup_id(application_id)
+        clean_revision_id = _safe_revision_lookup_id(revision_id)
+        clean_limit = _validate_limit(limit)
+        with self._read_connection() as connection:
+            if self._select_revision(connection, tenant_id, clean_application_id, clean_revision_id) is None:
+                raise ApplicationRevisionUnavailableError()
+            rows = connection.execute(
+                """SELECT report_json FROM application_evaluations WHERE revision_id = ?
+                ORDER BY generated_at DESC, rowid DESC LIMIT ?""",
+                (clean_revision_id, clean_limit),
+            ).fetchall()
+        try:
+            return tuple(ApplicationEvaluationReport.from_json(row["report_json"]) for row in rows)
+        except ApplicationEvaluationError as error:
+            raise ApplicationStoreSchemaError() from error
 
     def _initialize(self) -> None:
         with self._write_lock, self._write_transaction(validate_schema=False) as connection:
@@ -595,7 +659,7 @@ class ApplicationStore:
                     expected_columns={
                         table: columns
                         for table, columns in _EXPECTED_COLUMNS.items()
-                        if table != "application_drafts"
+                        if table not in {"application_drafts", "application_evaluations"}
                     },
                 )
                 self._migrate_v1_to_v2(connection)
@@ -608,6 +672,12 @@ class ApplicationStore:
                 version = 4
             if version == 4:
                 self._migrate_v4_to_v5(connection)
+                version = 5
+            if version == 5:
+                self._migrate_v5_to_v6(connection)
+                version = 6
+            if version == 6:
+                self._migrate_v6_to_v7(connection)
             elif version not in {0, _SCHEMA_VERSION}:
                 raise ApplicationStoreSchemaError()
             self._validate_schema(connection)
@@ -652,7 +722,7 @@ class ApplicationStore:
             configuration = _decode_legacy_configuration(row["configuration_json"])
             connection.execute(
                 "UPDATE application_revisions SET configuration_json = ? WHERE revision_id = ?",
-                (_encode_configuration(configuration), row["revision_id"]),
+                (_encode_v5_configuration(configuration), row["revision_id"]),
             )
         connection.execute("PRAGMA user_version = 4")
 
@@ -675,6 +745,40 @@ class ApplicationStore:
             """INSERT INTO application_drafts (
             application_id, version, configuration_json, updated_at, updated_by, change_summary
             ) SELECT application_id, 0, NULL, updated_at, 'migration', '' FROM applications"""
+        )
+        connection.execute("PRAGMA user_version = 5")
+
+    @staticmethod
+    def _migrate_v5_to_v6(connection: sqlite3.Connection) -> None:
+        """Add the deployment-managed model profile reference to every configuration."""
+
+        rows = connection.execute(
+            "SELECT revision_id, configuration_json FROM application_revisions"
+        ).fetchall()
+        for row in rows:
+            configuration = _decode_v5_configuration(row["configuration_json"])
+            connection.execute(
+                "UPDATE application_revisions SET configuration_json = ? WHERE revision_id = ?",
+                (_encode_configuration(configuration), row["revision_id"]),
+            )
+        drafts = connection.execute(
+            "SELECT application_id, configuration_json FROM application_drafts "
+            "WHERE configuration_json IS NOT NULL"
+        ).fetchall()
+        for draft in drafts:
+            configuration = _decode_v5_configuration(draft["configuration_json"])
+            connection.execute(
+                "UPDATE application_drafts SET configuration_json = ? WHERE application_id = ?",
+                (_encode_configuration(configuration), draft["application_id"]),
+            )
+        connection.execute("PRAGMA user_version = 6")
+
+    @staticmethod
+    def _migrate_v6_to_v7(connection: sqlite3.Connection) -> None:
+        connection.execute(_CREATE_EVALUATIONS_SQL)
+        connection.execute(
+            "CREATE INDEX idx_application_evaluations_revision_generated ON "
+            "application_evaluations (revision_id, generated_at DESC)"
         )
         connection.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
 
@@ -701,9 +805,20 @@ class ApplicationStore:
             for row in connection.execute(f"PRAGMA index_list({table})").fetchall()
             if str(row["name"]).startswith("idx_")
         }
-        if indexes != _EXPECTED_CUSTOM_INDEXES:
+        expected_indexes = {
+            name: definition
+            for name, definition in _EXPECTED_CUSTOM_INDEXES.items()
+            if name != "idx_application_evaluations_revision_generated"
+            or "application_evaluations" in expected
+        }
+        if indexes != expected_indexes:
             raise ApplicationStoreSchemaError()
-        for name, expected_index_columns in _EXPECTED_INDEX_COLUMNS.items():
+        expected_index_columns_by_name = {
+            name: columns
+            for name, columns in _EXPECTED_INDEX_COLUMNS.items()
+            if name in expected_indexes
+        }
+        for name, expected_index_columns in expected_index_columns_by_name.items():
             actual_index_columns = tuple(
                 str(row["name"])
                 for row in connection.execute(f"PRAGMA index_info({name})").fetchall()
@@ -832,6 +947,17 @@ CREATE TABLE application_drafts (
 """
 
 
+_CREATE_EVALUATIONS_SQL = """
+CREATE TABLE application_evaluations (
+    revision_id TEXT NOT NULL REFERENCES application_revisions(revision_id),
+    generated_at REAL NOT NULL CHECK (generated_at >= 0),
+    configuration_digest TEXT NOT NULL,
+    report_json TEXT NOT NULL,
+    UNIQUE (revision_id, generated_at, configuration_digest)
+)
+"""
+
+
 _CREATE_SCHEMA_SQL = """
 CREATE TABLE projects (
     project_id TEXT PRIMARY KEY NOT NULL,
@@ -903,6 +1029,13 @@ CREATE TABLE application_audit_events (
     application_id TEXT,
     revision_id TEXT
 );
+CREATE TABLE application_evaluations (
+    revision_id TEXT NOT NULL REFERENCES application_revisions(revision_id),
+    generated_at REAL NOT NULL CHECK (generated_at >= 0),
+    configuration_digest TEXT NOT NULL,
+    report_json TEXT NOT NULL,
+    UNIQUE (revision_id, generated_at, configuration_digest)
+);
 CREATE INDEX idx_projects_tenant_updated ON projects (tenant_id, updated_at DESC, project_id DESC);
 CREATE INDEX idx_applications_tenant_project_updated
     ON applications (tenant_id, project_id, updated_at DESC, application_id DESC);
@@ -912,6 +1045,8 @@ CREATE INDEX idx_deployments_application_deployed
     ON deployments (application_id, deployed_at DESC, deployment_id DESC);
 CREATE INDEX idx_application_audit_events_tenant_occurred
     ON application_audit_events (tenant_id, occurred_at DESC, audit_event_id DESC);
+CREATE INDEX idx_application_evaluations_revision_generated
+    ON application_evaluations (revision_id, generated_at DESC);
 """
 
 
@@ -957,6 +1092,10 @@ _EXPECTED_COLUMNS = {
         ("project_id", "TEXT", 0, 0), ("application_id", "TEXT", 0, 0),
         ("revision_id", "TEXT", 0, 0),
     ),
+    "application_evaluations": (
+        ("revision_id", "TEXT", 1, 0), ("generated_at", "REAL", 1, 0),
+        ("configuration_digest", "TEXT", 1, 0), ("report_json", "TEXT", 1, 0),
+    ),
 }
 
 _EXPECTED_CUSTOM_INDEXES = {
@@ -965,6 +1104,7 @@ _EXPECTED_CUSTOM_INDEXES = {
     "idx_revisions_application_number": (0, 0),
     "idx_deployments_application_deployed": (0, 0),
     "idx_application_audit_events_tenant_occurred": (0, 0),
+    "idx_application_evaluations_revision_generated": (0, 0),
 }
 
 _EXPECTED_INDEX_COLUMNS = {
@@ -977,6 +1117,7 @@ _EXPECTED_INDEX_COLUMNS = {
     "idx_application_audit_events_tenant_occurred": (
         "tenant_id", "occurred_at", "audit_event_id"
     ),
+    "idx_application_evaluations_revision_generated": ("revision_id", "generated_at"),
 }
 
 
@@ -1087,6 +1228,7 @@ def _encode_configuration(configuration: KnowledgeChatConfiguration) -> str:
             "require_citations": configuration.answer_policy.require_citations,
         },
         "knowledge_base_ids": list(configuration.knowledge_base_ids),
+        "model_profile_id": configuration.model_profile_id,
         "retrieval_profile": configuration.retrieval_profile.value,
         "session_policy": {
             "enabled": configuration.session_policy.enabled,
@@ -1099,13 +1241,32 @@ def _encode_configuration(configuration: KnowledgeChatConfiguration) -> str:
     return encoded
 
 
+def _encode_v5_configuration(configuration: KnowledgeChatConfiguration) -> str:
+    """Encode the exact schema-v5 shape during one-way historical migration."""
+    payload = {
+        "answer_policy": {
+            "allow_cloud": configuration.answer_policy.allow_cloud,
+            "allow_research": configuration.answer_policy.allow_research,
+            "allow_web": configuration.answer_policy.allow_web,
+            "require_citations": configuration.answer_policy.require_citations,
+        },
+        "knowledge_base_ids": list(configuration.knowledge_base_ids),
+        "retrieval_profile": configuration.retrieval_profile.value,
+        "session_policy": {
+            "enabled": configuration.session_policy.enabled,
+            "ttl_seconds": configuration.session_policy.ttl_seconds,
+        },
+    }
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
 def _decode_configuration(value: object) -> KnowledgeChatConfiguration:
     if not isinstance(value, str) or len(value.encode("utf-8")) > _MAX_CONFIGURATION_BYTES:
         raise ApplicationStoreSchemaError()
     try:
         payload = json.loads(value, object_pairs_hook=_strict_json_object)
         if not isinstance(payload, dict) or set(payload) != {
-            "knowledge_base_ids", "retrieval_profile", "answer_policy", "session_policy"
+            "knowledge_base_ids", "model_profile_id", "retrieval_profile", "answer_policy", "session_policy"
         }:
             raise ValueError
         answer = payload["answer_policy"]
@@ -1118,6 +1279,7 @@ def _decode_configuration(value: object) -> KnowledgeChatConfiguration:
             raise ValueError
         return KnowledgeChatConfiguration(
             knowledge_base_ids=tuple(payload["knowledge_base_ids"]),
+            model_profile_id=payload["model_profile_id"],
             retrieval_profile=RetrievalProfile(payload["retrieval_profile"]),
             answer_policy=AnswerPolicy(**answer),
             session_policy=SessionPolicy(**session),
@@ -1190,6 +1352,35 @@ def _decode_legacy_configuration(value: object) -> KnowledgeChatConfiguration:
             raise ValueError
         return KnowledgeChatConfiguration(
             knowledge_base_ids=tuple(payload["knowledge_base_ids"]),
+            answer_policy=AnswerPolicy(**answer),
+            session_policy=SessionPolicy(**session),
+        )
+    except (ApplicationContractError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise ApplicationStoreSchemaError() from error
+
+
+def _decode_v5_configuration(value: object) -> KnowledgeChatConfiguration:
+    """Decode schema-v5 configuration before model profiles became explicit."""
+    if not isinstance(value, str) or len(value.encode("utf-8")) > _MAX_CONFIGURATION_BYTES:
+        raise ApplicationStoreSchemaError()
+    try:
+        payload = json.loads(value, object_pairs_hook=_strict_json_object)
+        if not isinstance(payload, dict) or set(payload) != {
+            "knowledge_base_ids", "retrieval_profile", "answer_policy", "session_policy"
+        }:
+            raise ValueError
+        answer = payload["answer_policy"]
+        session = payload["session_policy"]
+        if not isinstance(answer, dict) or set(answer) != {
+            "require_citations", "allow_cloud", "allow_web", "allow_research"
+        }:
+            raise ValueError
+        if not isinstance(session, dict) or set(session) != {"enabled", "ttl_seconds"}:
+            raise ValueError
+        return KnowledgeChatConfiguration(
+            knowledge_base_ids=tuple(payload["knowledge_base_ids"]),
+            model_profile_id=DEFAULT_MODEL_PROFILE_ID,
+            retrieval_profile=RetrievalProfile(payload["retrieval_profile"]),
             answer_policy=AnswerPolicy(**answer),
             session_policy=SessionPolicy(**session),
         )

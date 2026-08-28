@@ -196,6 +196,73 @@
           "title": "ApplicationCreatePayload",
           "type": "object"
         },
+        "ApplicationEvaluationListResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "count": {
+              "minimum": 0.0,
+              "title": "Count",
+              "type": "integer"
+            },
+            "items": {
+              "items": {
+                "$ref": "#/components/schemas/ApplicationEvaluationResponse"
+              },
+              "title": "Items",
+              "type": "array"
+            }
+          },
+          "required": [
+            "items",
+            "count"
+          ],
+          "title": "ApplicationEvaluationListResponse",
+          "type": "object"
+        },
+        "ApplicationEvaluationResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "application_id": {
+              "title": "Application Id",
+              "type": "string"
+            },
+            "benchmark": {
+              "additionalProperties": true,
+              "title": "Benchmark",
+              "type": "object"
+            },
+            "configuration_digest": {
+              "maxLength": 64,
+              "minLength": 64,
+              "title": "Configuration Digest",
+              "type": "string"
+            },
+            "generated_at": {
+              "minimum": 0.0,
+              "title": "Generated At",
+              "type": "number"
+            },
+            "revision_id": {
+              "title": "Revision Id",
+              "type": "string"
+            },
+            "revision_number": {
+              "minimum": 1.0,
+              "title": "Revision Number",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "application_id",
+            "revision_id",
+            "revision_number",
+            "configuration_digest",
+            "generated_at",
+            "benchmark"
+          ],
+          "title": "ApplicationEvaluationResponse",
+          "type": "object"
+        },
         "ApplicationKind": {
           "description": "Application runtimes supported by the first platform kernel.",
           "enum": [
@@ -288,6 +355,99 @@
           ],
           "title": "ApplicationStatus",
           "type": "string"
+        },
+        "AuditEventListResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "count": {
+              "minimum": 0.0,
+              "title": "Count",
+              "type": "integer"
+            },
+            "items": {
+              "items": {
+                "$ref": "#/components/schemas/AuditEventResponse"
+              },
+              "title": "Items",
+              "type": "array"
+            }
+          },
+          "required": [
+            "items",
+            "count"
+          ],
+          "title": "AuditEventListResponse",
+          "type": "object"
+        },
+        "AuditEventResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "actor": {
+              "title": "Actor",
+              "type": "string"
+            },
+            "application_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Application Id"
+            },
+            "event_type": {
+              "title": "Event Type",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "occurred_at": {
+              "title": "Occurred At",
+              "type": "number"
+            },
+            "project_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            },
+            "revision_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Revision Id"
+            },
+            "summary": {
+              "title": "Summary",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "event_type",
+            "occurred_at",
+            "actor",
+            "summary",
+            "project_id",
+            "application_id",
+            "revision_id"
+          ],
+          "title": "AuditEventResponse",
+          "type": "object"
         },
         "Body_create_knowledge_base_v1_knowledge_bases_post": {
           "properties": {
@@ -603,6 +763,17 @@
               "title": "Knowledge Base Ids",
               "type": "array"
             },
+            "model_profile_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model Profile Id"
+            },
             "retrieval_profile": {
               "anyOf": [
                 {
@@ -694,6 +865,14 @@
               "minItems": 1,
               "title": "Knowledge Base Ids",
               "type": "array"
+            },
+            "model_profile_id": {
+              "default": "default",
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "title": "Model Profile Id",
+              "type": "string"
             },
             "retrieval_profile": {
               "default": "default",
@@ -1140,6 +1319,85 @@
           "title": "ProjectResponse",
           "type": "object"
         },
+        "ResourceAccessMode": {
+          "enum": [
+            "read"
+          ],
+          "title": "ResourceAccessMode",
+          "type": "string"
+        },
+        "ResourceBindingListResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "count": {
+              "minimum": 0.0,
+              "title": "Count",
+              "type": "integer"
+            },
+            "items": {
+              "items": {
+                "$ref": "#/components/schemas/ResourceBindingResponse"
+              },
+              "title": "Items",
+              "type": "array"
+            }
+          },
+          "required": [
+            "items",
+            "count"
+          ],
+          "title": "ResourceBindingListResponse",
+          "type": "object"
+        },
+        "ResourceBindingResponse": {
+          "additionalProperties": false,
+          "properties": {
+            "access_mode": {
+              "$ref": "#/components/schemas/ResourceAccessMode"
+            },
+            "application_id": {
+              "title": "Application Id",
+              "type": "string"
+            },
+            "created_at": {
+              "title": "Created At",
+              "type": "number"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "resource_id": {
+              "title": "Resource Id",
+              "type": "string"
+            },
+            "resource_kind": {
+              "$ref": "#/components/schemas/ResourceKind"
+            },
+            "revision_id": {
+              "title": "Revision Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "application_id",
+            "revision_id",
+            "resource_kind",
+            "resource_id",
+            "access_mode",
+            "created_at"
+          ],
+          "title": "ResourceBindingResponse",
+          "type": "object"
+        },
+        "ResourceKind": {
+          "enum": [
+            "knowledge_base"
+          ],
+          "title": "ResourceKind",
+          "type": "string"
+        },
         "RetrievalProfile": {
           "description": "Named retrieval contracts supported by the current application runtime.",
           "enum": [
@@ -1175,6 +1433,14 @@
               "minItems": 1,
               "title": "Knowledge Base Ids",
               "type": "array"
+            },
+            "model_profile_id": {
+              "default": "default",
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "title": "Model Profile Id",
+              "type": "string"
             },
             "retrieval_profile": {
               "default": "default",
@@ -1260,6 +1526,10 @@
               "title": "Knowledge Base Ids",
               "type": "array"
             },
+            "model_profile_id": {
+              "title": "Model Profile Id",
+              "type": "string"
+            },
             "retrieval_profile": {
               "$ref": "#/components/schemas/RetrievalProfile"
             },
@@ -1278,6 +1548,7 @@
             "revision_number",
             "configuration_schema_version",
             "knowledge_base_ids",
+            "model_profile_id",
             "retrieval_profile",
             "answer_policy",
             "session_policy",
@@ -1873,6 +2144,68 @@
           ]
         }
       },
+      "/v1/applications/{application_id}/audit-events": {
+        "get": {
+          "operationId": "list_audit_events_v1_applications__application_id__audit_events_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "application_id",
+              "required": true,
+              "schema": {
+                "title": "Application Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 50,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/AuditEventListResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "List Audit Events",
+          "tags": [
+            "applications"
+          ]
+        }
+      },
       "/v1/applications/{application_id}/deployments": {
         "get": {
           "operationId": "list_deployments_v1_applications__application_id__deployments_get",
@@ -2276,6 +2609,136 @@
             }
           ],
           "summary": "Create Revision",
+          "tags": [
+            "applications"
+          ]
+        }
+      },
+      "/v1/applications/{application_id}/revisions/{revision_id}/bindings": {
+        "get": {
+          "operationId": "list_bindings_v1_applications__application_id__revisions__revision_id__bindings_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "application_id",
+              "required": true,
+              "schema": {
+                "title": "Application Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "revision_id",
+              "required": true,
+              "schema": {
+                "title": "Revision Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ResourceBindingListResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "List Bindings",
+          "tags": [
+            "applications"
+          ]
+        }
+      },
+      "/v1/applications/{application_id}/revisions/{revision_id}/evaluations": {
+        "get": {
+          "operationId": "list_evaluations_v1_applications__application_id__revisions__revision_id__evaluations_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "application_id",
+              "required": true,
+              "schema": {
+                "title": "Application Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "revision_id",
+              "required": true,
+              "schema": {
+                "title": "Revision Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 50,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ApplicationEvaluationListResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "List Evaluations",
           "tags": [
             "applications"
           ]
