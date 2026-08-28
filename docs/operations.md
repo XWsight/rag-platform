@@ -128,7 +128,7 @@ API Key 或客户标识写入演练报告。
 
 当前版本把 Catalog 升级到 schema v4。全新空存储会直接初始化为 v4；首次打开已有 schema v2/v3 时，应用会在单个 SQLite 事务中重建目录表并写入 `user_version=4`，以支持显式 `PREPARING` 和不可变清单提交。未知版本以及带旧表的未版本化数据库会被拒绝。该迁移对旧程序不向后兼容：升级前必须完成停写全卷快照，回滚时必须同时恢复旧镜像和升级前快照，不能只切回旧镜像，也不要手工修改 `PRAGMA user_version`。
 
-`applications.sqlite3` 当前 schema 为 v5；升级会在事务内依次补齐云端策略默认值、扩展退役/Draft 审计事件，为旧版本配置写入显式的 `retrieval_profile=default`，并为每个应用创建空 Draft。
+`applications.sqlite3` 当前 schema 为 v7；升级会在事务内依次补齐云端策略默认值、扩展退役/Draft 审计事件，为旧版本配置写入显式的 `retrieval_profile=default` 和 `model_profile_id=default`，为每个应用创建空 Draft，并建立不可变 Revision 的评测证据表。升级前仍须停写并备份整个持久卷；回滚必须同时恢复旧镜像和升级前快照。
 该迁移同样要求旧镜像与升级前全卷快照配对回滚。不要用两个版本同时连接同一个卷进行“蓝绿”测试；
 这仍是并发写入同一 SQLite/向量索引数据集。
 

@@ -8,9 +8,11 @@ from pydantic import Field
 from rag_system.api_contract import (
     ApplicationAnswerPayload,
     ApplicationAnswerResponse,
+    ApplicationEvaluationListResponse,
     ApplicationCreatePayload,
     ApplicationListResponse,
     ApplicationResponse,
+    AuditEventListResponse,
     DeploymentCreatePayload,
     DeploymentListResponse,
     DeploymentResponse,
@@ -23,8 +25,12 @@ from rag_system.api_contract import (
     RevisionCreatePayload,
     RevisionListResponse,
     RevisionResponse,
+    ResourceBindingListResponse,
+    audit_event_response,
     answer_response,
     application_response,
+    application_evaluation_response,
+    binding_response,
     deployment_response,
     draft_response,
     project_response,
@@ -182,6 +188,7 @@ def register_application_routes(
         security.consume(request, principal)
         configuration = KnowledgeChatConfiguration(
             knowledge_base_ids=tuple(payload.knowledge_base_ids),
+            model_profile_id=payload.model_profile_id,
             retrieval_profile=RetrievalProfile(payload.retrieval_profile),
             answer_policy=AnswerPolicy(**payload.answer_policy.model_dump()),
             session_policy=SessionPolicy(**payload.session_policy.model_dump()),
@@ -230,6 +237,7 @@ def register_application_routes(
         security.consume(request, principal)
         configuration = KnowledgeChatConfiguration(
             knowledge_base_ids=tuple(payload.knowledge_base_ids),
+            model_profile_id=payload.model_profile_id,
             retrieval_profile=RetrievalProfile(payload.retrieval_profile),
             answer_policy=AnswerPolicy(**payload.answer_policy.model_dump()),
             session_policy=SessionPolicy(**payload.session_policy.model_dump()),
@@ -258,6 +266,47 @@ def register_application_routes(
             for item in service.list_revisions(principal, application_id, limit=limit)
         )
         return RevisionListResponse(items=items, count=len(items))
+
+    @app.get(
+        "/v1/applications/{application_id}/revisions/{revision_id}/bindings",
+        response_model=ResourceBindingListResponse,
+        tags=["applications"],
+    )
+    def list_bindings(
+        request: Request,
+        principal: Annotated[Principal, Depends(security.reader)],
+        application_id: str,
+        revision_id: str,
+    ) -> ResourceBindingListResponse:
+        request.state.operation = "application_read"
+        security.consume(request, principal)
+        items = tuple(
+            binding_response(item)
+            for item in service.list_bindings(principal, application_id, revision_id)
+        )
+        return ResourceBindingListResponse(items=items, count=len(items))
+
+    @app.get(
+        "/v1/applications/{application_id}/revisions/{revision_id}/evaluations",
+        response_model=ApplicationEvaluationListResponse,
+        tags=["applications"],
+    )
+    def list_evaluations(
+        request: Request,
+        principal: Annotated[Principal, Depends(security.reader)],
+        application_id: str,
+        revision_id: str,
+        limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    ) -> ApplicationEvaluationListResponse:
+        request.state.operation = "application_read"
+        security.consume(request, principal)
+        items = tuple(
+            application_evaluation_response(item)
+            for item in service.list_evaluations(
+                principal, application_id, revision_id, limit=limit
+            )
+        )
+        return ApplicationEvaluationListResponse(items=items, count=len(items))
 
     @app.post(
         "/v1/applications/{application_id}/deployments",
@@ -299,6 +348,27 @@ def register_application_routes(
             for item in service.list_deployments(principal, application_id, limit=limit)
         )
         return DeploymentListResponse(items=items, count=len(items))
+
+    @app.get(
+        "/v1/applications/{application_id}/audit-events",
+        response_model=AuditEventListResponse,
+        tags=["applications"],
+    )
+    def list_audit_events(
+        request: Request,
+        principal: Annotated[Principal, Depends(security.reader)],
+        application_id: str,
+        limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    ) -> AuditEventListResponse:
+        request.state.operation = "application_read"
+        security.consume(request, principal)
+        items = tuple(
+            audit_event_response(item)
+            for item in service.list_audit_events(
+                principal, application_id=application_id, limit=limit
+            )
+        )
+        return AuditEventListResponse(items=items, count=len(items))
 
     @app.post(
         "/v1/apps/{application_id}/answer",

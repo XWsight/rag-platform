@@ -120,6 +120,10 @@ class ApplicationApiTests(unittest.TestCase):
         document = self.client.get("/openapi.json").json()
         self.assertIn("/v1/apps/{application_id}/answer", document["paths"])
         self.assertIn("/v1/applications/{application_id}/deployments", document["paths"])
+        self.assertIn(
+            "/v1/applications/{application_id}/revisions/{revision_id}/bindings",
+            document["paths"],
+        )
         response = self.client.post(
             "/v1/projects", headers=self.headers,
             json={"display_name": "Support", "unexpected": True},
@@ -168,6 +172,23 @@ class ApplicationApiTests(unittest.TestCase):
         )
         self.assertEqual(stale.status_code, 409)
         self.assertEqual(stale.json()["error"]["code"], "application_conflict")
+        bindings = self.client.get(
+            f"/v1/applications/{application['id']}/revisions/{revision.json()['id']}/bindings",
+            headers=self.headers,
+        )
+        self.assertEqual(bindings.status_code, 200)
+        self.assertEqual(bindings.json()["count"], 1)
+        audit = self.client.get(
+            f"/v1/applications/{application['id']}/audit-events", headers=self.headers
+        )
+        self.assertEqual(audit.status_code, 200)
+        self.assertGreaterEqual(audit.json()["count"], 4)
+        evaluations = self.client.get(
+            f"/v1/applications/{application['id']}/revisions/{revision.json()['id']}/evaluations",
+            headers=self.headers,
+        )
+        self.assertEqual(evaluations.status_code, 200)
+        self.assertEqual(evaluations.json()["count"], 0)
 
     def _create_revision(self, application_id: str, summary: str, *, allow_cloud: bool) -> str:
         response = self.client.post(

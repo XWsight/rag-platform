@@ -88,6 +88,20 @@ class ApplicationServiceTests(unittest.TestCase):
                 self.writer, application.application_id, configuration, change_summary="Blocked"
             )
 
+    def test_model_profiles_must_be_trusted_by_the_deployment(self) -> None:
+        project = self.service.create_project(self.writer, "Support")
+        application = self.service.create_knowledge_application(
+            self.writer, project.project_id, "Support assistant"
+        )
+        configuration = KnowledgeChatConfiguration(
+            knowledge_base_ids=(KNOWLEDGE_BASE_ID,), model_profile_id="restricted"
+        )
+
+        with self.assertRaisesRegex(ApplicationServiceValidationError, "not trusted"):
+            self.service.create_knowledge_revision(
+                self.writer, application.application_id, configuration, change_summary="Blocked"
+            )
+
     def test_mutations_require_existing_writer_and_operator_roles(self) -> None:
         with self.assertRaises(ApplicationAuthorizationError):
             self.service.create_project(self.reader, "Forbidden")

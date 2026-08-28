@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import math
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
@@ -92,6 +93,19 @@ def _env_float(name: str, default: float) -> float:
 def _env_text(name: str, default: str) -> str:
     value = os.getenv(name)
     return default if value is None else value.strip()
+
+
+_MODEL_PROFILE_ID_PATTERN = re.compile(r"[a-z][a-z0-9_-]{0,63}")
+
+
+def _env_model_profile_ids(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
+    value = os.getenv(name)
+    candidates = default if value is None else tuple(item.strip() for item in value.split(","))
+    if not candidates or any(_MODEL_PROFILE_ID_PATTERN.fullmatch(item) is None for item in candidates):
+        raise ValueError(f"{name} must be a comma-separated list of model profile IDs")
+    if len(set(candidates)) != len(candidates):
+        raise ValueError(f"{name} cannot contain duplicate model profile IDs")
+    return candidates
 
 
 @dataclass(frozen=True, slots=True)
@@ -234,6 +248,9 @@ class Settings:
         default_factory=lambda: _env_bool("RAG_ALLOW_CLOUD_DEFAULT", False)
     )
     allow_web_default: bool = field(default_factory=lambda: _env_bool("RAG_ALLOW_WEB_DEFAULT", False))
+    model_profile_ids: tuple[str, ...] = field(
+        default_factory=lambda: _env_model_profile_ids("RAG_MODEL_PROFILE_IDS", ("default",))
+    )
 
     @property
     def default_document(self) -> Path:
@@ -327,6 +344,8 @@ class Settings:
             raise ValueError("research_max_queries must be between 1 and 6")
         if not 1 <= self.research_max_web_queries <= self.research_max_queries:
             raise ValueError("research web query limit must fit within research query limit")
+        if not self.model_profile_ids:
+            raise ValueError("at least one trusted model profile is required")
         self._validate_https_url("chat_url", self.chat_url)
         self._validate_https_url("search_url", self.search_url)
         return self

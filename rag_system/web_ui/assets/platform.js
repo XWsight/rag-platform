@@ -35,18 +35,20 @@ async function renderApplications() {
   const answerSelect = byId("answer-application");
   list.replaceChildren(); answerSelect.replaceChildren();
   for (const application of state.applications) {
-    const [revisions, deployments] = await Promise.all([
+    const [revisions, deployments, auditEvents] = await Promise.all([
       api(`/v1/applications/${application.id}/revisions`),
       api(`/v1/applications/${application.id}/deployments`),
+      api(`/v1/applications/${application.id}/audit-events?limit=5`),
     ]);
     const entry = document.createElement("article"); entry.className = "application-entry";
     const title = document.createElement("strong"); title.textContent = application.display_name;
     const detail = document.createElement("small");
-    detail.textContent = `${application.active_revision_id ? "已发布" : "未发布"} · ${revisions.count} 个版本 · ${deployments.count} 次部署`;
+    detail.textContent = `${application.active_revision_id ? "已发布" : "未发布"} · ${revisions.count} 个版本 · ${deployments.count} 次部署 · ${auditEvents.count} 条审计记录`;
     entry.append(title, detail);
     for (const revision of revisions.items) {
       const row = document.createElement("small");
-      row.textContent = `v${revision.revision_number} · ${revision.knowledge_base_ids.join(", ")}${revision.id === application.active_revision_id ? " · 当前" : ""}`;
+      const bindings = await api(`/v1/applications/${application.id}/revisions/${revision.id}/bindings`);
+      row.textContent = `v${revision.revision_number} · ${revision.model_profile_id} · ${bindings.count} 个绑定${revision.id === application.active_revision_id ? " · 当前" : ""}`;
       entry.append(row);
       if (revision.id !== application.active_revision_id) {
         const rollback = document.createElement("button"); rollback.className = "secondary-button";

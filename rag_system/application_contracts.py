@@ -20,6 +20,7 @@ from rag_system.tenancy import TenantId
 
 APPLICATION_CONFIGURATION_SCHEMA_VERSION = 1
 MAX_KNOWLEDGE_BASE_BINDINGS = 32
+DEFAULT_MODEL_PROFILE_ID = "default"
 
 _PROJECT_ID_PATTERN = re.compile(r"prj_[A-Za-z0-9_-]{32}")
 _APPLICATION_ID_PATTERN = re.compile(r"app_[A-Za-z0-9_-]{32}")
@@ -28,6 +29,7 @@ _DEPLOYMENT_ID_PATTERN = re.compile(r"dep_[A-Za-z0-9_-]{32}")
 _BINDING_ID_PATTERN = re.compile(r"bind_[A-Za-z0-9_-]{32}")
 _AUDIT_EVENT_ID_PATTERN = re.compile(r"audit_[A-Za-z0-9_-]{32}")
 _SUBJECT_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:@/-]{0,254}")
+_MODEL_PROFILE_ID_PATTERN = re.compile(r"[a-z][a-z0-9_-]{0,63}")
 
 
 class ApplicationContractError(Exception):
@@ -120,6 +122,7 @@ class KnowledgeChatConfiguration:
     """Typed configuration for the initial trusted knowledge-chat application."""
 
     knowledge_base_ids: tuple[str, ...]
+    model_profile_id: str = DEFAULT_MODEL_PROFILE_ID
     retrieval_profile: RetrievalProfile = RetrievalProfile.DEFAULT
     answer_policy: AnswerPolicy = AnswerPolicy()
     session_policy: SessionPolicy = SessionPolicy()
@@ -138,6 +141,7 @@ class KnowledgeChatConfiguration:
             raise ApplicationValidationError("knowledge_base_ids contains an invalid ID.") from error
         if len(set(normalized)) != len(normalized):
             raise ApplicationValidationError("knowledge_base_ids cannot contain duplicates.")
+        object.__setattr__(self, "model_profile_id", validate_model_profile_id(self.model_profile_id))
         if not isinstance(self.retrieval_profile, RetrievalProfile):
             raise ApplicationValidationError("retrieval_profile must be a RetrievalProfile.")
         if not isinstance(self.answer_policy, AnswerPolicy):
@@ -383,6 +387,14 @@ def validate_description(value: object) -> str:
     return value
 
 
+def validate_model_profile_id(value: object) -> str:
+    """Validate an opaque, deployment-managed model profile reference."""
+
+    if not isinstance(value, str) or _MODEL_PROFILE_ID_PATTERN.fullmatch(value) is None:
+        raise ApplicationValidationError("Model profile ID has an invalid format.")
+    return value
+
+
 def validate_change_summary(value: object) -> str:
     if not isinstance(value, str):
         raise ApplicationValidationError("Change summary must be text.")
@@ -441,6 +453,7 @@ def _validate_tenant_id(value: object) -> TenantId:
 
 __all__ = [
     "APPLICATION_CONFIGURATION_SCHEMA_VERSION",
+    "DEFAULT_MODEL_PROFILE_ID",
     "MAX_KNOWLEDGE_BASE_BINDINGS",
     "AnswerPolicy",
     "Application",
@@ -470,6 +483,7 @@ __all__ = [
     "validate_deployment_id",
     "validate_description",
     "validate_display_name",
+    "validate_model_profile_id",
     "validate_project_id",
     "validate_revision_id",
     "validate_subject",

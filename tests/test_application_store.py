@@ -32,6 +32,8 @@ from rag_system.application_store import (
     ApplicationUnavailableError,
     ProjectUnavailableError,
 )
+from rag_system.answer_benchmark import AnswerBenchmarkMetrics, AnswerBenchmarkReport
+from rag_system.application_evaluation import bind_application_evaluation
 from rag_system.tenancy import Principal, TenantId
 
 
@@ -197,7 +199,7 @@ class ApplicationStoreTests(unittest.TestCase):
         with closing(sqlite3.connect(self.database)) as connection:
             self.assertEqual(connection.execute("PRAGMA journal_mode").fetchone()[0].lower(), "wal")
             self.assertEqual(connection.execute("PRAGMA foreign_keys").fetchone()[0], 0)
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 5)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 7)
         project = self.project()
         self.store.create_project(self.tenant_a, project)
         with self.assertRaises(ApplicationStoreStorageError):
@@ -215,12 +217,14 @@ class ApplicationStoreTests(unittest.TestCase):
             ).fetchone()
             payload = json.loads(row[0])
             del payload["retrieval_profile"]
+            del payload["model_profile_id"]
             del payload["answer_policy"]["allow_cloud"]
             connection.execute(
                 "UPDATE application_revisions SET configuration_json = ? WHERE revision_id = ?",
                 (json.dumps(payload, separators=(",", ":"), sort_keys=True), revision.revision_id),
             )
             connection.execute("DROP TABLE application_drafts")
+            connection.execute("DROP TABLE application_evaluations")
             connection.execute("PRAGMA user_version = 1")
             connection.commit()
 
@@ -232,13 +236,14 @@ class ApplicationStoreTests(unittest.TestCase):
             ).configuration.answer_policy.allow_cloud
         )
         with closing(sqlite3.connect(self.database)) as connection:
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 5)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 7)
 
     def test_schema_migrates_v4_records_to_an_empty_draft(self) -> None:
         project = self.store.create_project(self.tenant_a, self.project())
         application = self.store.create_application(self.tenant_a, self.application(project))
         with closing(sqlite3.connect(self.database)) as connection:
             connection.execute("DROP TABLE application_drafts")
+            connection.execute("DROP TABLE application_evaluations")
             connection.execute("PRAGMA user_version = 4")
             connection.commit()
 
@@ -262,6 +267,31 @@ class ApplicationStoreTests(unittest.TestCase):
                     "AND name = 'idx_revisions_application_number'"
                 ).fetchone()
             )
+
+    def test_persists_evaluation_evidence_for_one_immutable_revision(self) -> None:
+        project = self.store.create_project(self.tenant_a, self.project())
+        application = self.store.create_application(self.tenant_a, self.application(project))
+        revision, binding = self.revision_and_binding(application)
+        self.store.create_revision(self.tenant_a, revision, (binding,))
+        report = bind_application_evaluation(
+            revision,
+            AnswerBenchmarkReport(
+                dataset_digest="a" * 64,
+                case_count=1,
+                fact_count=1,
+                metrics=AnswerBenchmarkMetrics(1.0, 1.0, 1.0, 1.0, 1.0),
+                results=(),
+            ),
+            generated_at=5.0,
+        )
+
+        self.assertEqual(self.store.save_evaluation(self.tenant_a, report), report)
+        self.assertEqual(
+            self.store.list_evaluations(
+                self.tenant_a, application.application_id, revision.revision_id
+            ),
+            (report,),
+        )
 
     def test_publish_is_atomic_when_deployment_or_audit_persistence_fails(self) -> None:
         project = self.store.create_project(self.tenant_a, self.project())

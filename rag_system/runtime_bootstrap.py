@@ -326,8 +326,16 @@ def build_production_runtime(
             metrics=metrics,
         )
         application_store = ApplicationStore(storage_root / "applications.sqlite3")
-        application_service = ApplicationService(application_store, components.catalog)
-        application_runtime = KnowledgeApplicationRuntime(application_store, platform)
+        application_service = ApplicationService(
+            application_store,
+            components.catalog,
+            trusted_model_profile_ids=settings.model_profile_ids,
+        )
+        application_runtime = KnowledgeApplicationRuntime(
+            application_store,
+            platform,
+            trusted_model_profile_ids=settings.model_profile_ids,
+        )
         rate_limiter = TokenBucketRateLimiter(
             rate_per_second=settings.rate_limit_per_second,
             capacity=settings.rate_limit_capacity,
