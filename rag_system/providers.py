@@ -34,6 +34,7 @@ _MAX_RESULT_ID_CHARACTERS = 96
 _MAX_TITLE_CHARACTERS = 300
 _MAX_CONTENT_CHARACTERS = 4_000
 _MAX_URL_CHARACTERS = 2_048
+_MODEL_IDENTIFIER_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}")
 
 
 class _ResponseLike(Protocol):
@@ -223,16 +224,27 @@ class ZhipuChatModel(_ZhipuHTTPClient):
         question: str,
         evidence: Sequence[tuple[str, str]],
     ) -> GeneratedAnswer:
+        return self.answer_with_model(question, evidence, model=self._settings.chat_model)
+
+    def answer_with_model(
+        self,
+        question: str,
+        evidence: Sequence[tuple[str, str]],
+        *,
+        model: str,
+    ) -> GeneratedAnswer:
         normalized_question = question.strip() if isinstance(question, str) else ""
         if not normalized_question:
             raise ValueError("question cannot be empty")
         if len(normalized_question) > self._settings.max_question_characters:
             raise ValueError("question exceeds the configured character limit")
+        if _MODEL_IDENTIFIER_PATTERN.fullmatch(model) is None:
+            raise ValueError("model must be a valid provider model identifier")
 
         prepared = self._answer_protocol.prepare(normalized_question, evidence)
         messages = [message.to_payload() for message in prepared.messages]
         request_payload = {
-            "model": self._settings.chat_model,
+            "model": model,
             "messages": messages,
             "thinking": {"type": "disabled"},
             "do_sample": False,
@@ -257,6 +269,15 @@ class ZhipuChatModel(_ZhipuHTTPClient):
     def plan_queries(self, question: str, *, max_queries: int) -> tuple[str, ...]:
         """Create a bounded JSON query plan for complex or multi-hop questions."""
 
+        return self.plan_queries_with_model(
+            question, max_queries=max_queries, model=self._settings.chat_model
+        )
+
+    def plan_queries_with_model(
+        self, question: str, *, max_queries: int, model: str
+    ) -> tuple[str, ...]:
+        """Create a query plan with the same resolved model as answer generation."""
+
         normalized_question = question.strip() if isinstance(question, str) else ""
         if not normalized_question:
             raise ValueError("question cannot be empty")
@@ -264,11 +285,13 @@ class ZhipuChatModel(_ZhipuHTTPClient):
             raise ValueError("question exceeds the configured character limit")
         if not 1 <= max_queries <= 6:
             raise ValueError("max_queries must be between 1 and 6")
+        if _MODEL_IDENTIFIER_PATTERN.fullmatch(model) is None:
+            raise ValueError("model must be a valid provider model identifier")
 
         data = self._post_json(
             self._settings.chat_url,
             {
-                "model": self._settings.chat_model,
+                "model": model,
                 "messages": [
                     {
                         "role": "system",

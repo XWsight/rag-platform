@@ -1,5 +1,7 @@
 """Published-application HTTP route registration."""
 
+import json
+
 from typing import Annotated, Protocol
 
 from fastapi import Depends, FastAPI, Query, Request
@@ -8,7 +10,9 @@ from pydantic import Field
 from rag_system.api_contract import (
     ApplicationAnswerPayload,
     ApplicationAnswerResponse,
+    ApplicationEvaluationCreatePayload,
     ApplicationEvaluationListResponse,
+    ApplicationEvaluationResponse,
     ApplicationCreatePayload,
     ApplicationListResponse,
     ApplicationResponse,
@@ -46,6 +50,8 @@ from rag_system.application_contracts import (
     SessionPolicy,
 )
 from rag_system.application_service import ApplicationService
+from rag_system.application_service import ApplicationServiceValidationError
+from rag_system.application_evaluation import ApplicationEvaluationError, ApplicationEvaluationReport
 from rag_system.config import Settings
 from rag_system.tenancy import Principal
 
@@ -307,6 +313,32 @@ def register_application_routes(
             )
         )
         return ApplicationEvaluationListResponse(items=items, count=len(items))
+
+    @app.post(
+        "/v1/applications/{application_id}/revisions/{revision_id}/evaluations",
+        response_model=ApplicationEvaluationResponse,
+        tags=["applications"],
+    )
+    def record_evaluation(
+        request: Request,
+        principal: Annotated[Principal, Depends(security.writer)],
+        application_id: str,
+        revision_id: str,
+        payload: ApplicationEvaluationCreatePayload,
+    ) -> ApplicationEvaluationResponse:
+        request.state.operation = "application_manage"
+        security.consume(request, principal)
+        try:
+            report = ApplicationEvaluationReport.from_json(
+                json.dumps(payload.report, ensure_ascii=False, separators=(",", ":"))
+            )
+        except ApplicationEvaluationError as error:
+            raise ApplicationServiceValidationError("Evaluation report is invalid.") from error
+        if report.application_id != application_id or report.revision_id != revision_id:
+            raise ApplicationServiceValidationError(
+                "Evaluation report does not match the requested application revision."
+            )
+        return application_evaluation_response(service.record_evaluation(principal, report))
 
     @app.post(
         "/v1/applications/{application_id}/deployments",

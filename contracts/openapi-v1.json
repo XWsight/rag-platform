@@ -196,6 +196,22 @@
           "title": "ApplicationCreatePayload",
           "type": "object"
         },
+        "ApplicationEvaluationCreatePayload": {
+          "additionalProperties": false,
+          "description": "One complete, versioned evaluation report produced by a release pipeline.",
+          "properties": {
+            "report": {
+              "additionalProperties": true,
+              "title": "Report",
+              "type": "object"
+            }
+          },
+          "required": [
+            "report"
+          ],
+          "title": "ApplicationEvaluationCreatePayload",
+          "type": "object"
+        },
         "ApplicationEvaluationListResponse": {
           "additionalProperties": false,
           "properties": {
@@ -2739,6 +2755,73 @@
             }
           ],
           "summary": "List Evaluations",
+          "tags": [
+            "applications"
+          ]
+        },
+        "post": {
+          "operationId": "record_evaluation_v1_applications__application_id__revisions__revision_id__evaluations_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "application_id",
+              "required": true,
+              "schema": {
+                "title": "Application Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "revision_id",
+              "required": true,
+              "schema": {
+                "title": "Revision Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationEvaluationCreatePayload"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ApplicationEvaluationResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "security": [
+            {
+              "ApiKeyAuth": []
+            },
+            {
+              "BearerAuth": []
+            }
+          ],
+          "summary": "Record Evaluation",
           "tags": [
             "applications"
           ]

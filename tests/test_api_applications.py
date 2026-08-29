@@ -11,6 +11,8 @@ from rag_system.api import create_app
 from rag_system.application_runtime import KnowledgeApplicationRuntime
 from rag_system.application_service import ApplicationService
 from rag_system.application_store import ApplicationStore
+from rag_system.answer_benchmark import AnswerBenchmarkMetrics, AnswerBenchmarkReport
+from rag_system.application_evaluation import bind_application_evaluation
 from rag_system.observability import JsonEventLogger
 from rag_system.rate_limit import TokenBucketRateLimiter
 from rag_system.tenancy import ApiKeyAuthenticator, Principal, TenantId
@@ -189,6 +191,39 @@ class ApplicationApiTests(unittest.TestCase):
         )
         self.assertEqual(evaluations.status_code, 200)
         self.assertEqual(evaluations.json()["count"], 0)
+
+    def test_release_pipeline_can_submit_and_read_evaluation_evidence(self) -> None:
+        project = self.client.post(
+            "/v1/projects", headers=self.headers, json={"display_name": "Support"}
+        ).json()
+        application = self.client.post(
+            "/v1/applications",
+            headers=self.headers,
+            json={"project_id": project["id"], "display_name": "Support", "application_kind": "knowledge_chat"},
+        ).json()
+        revision_id = self._create_revision(application["id"], "Evaluated candidate", allow_cloud=False)
+        revision = self.store.get_revision(self.principal, application["id"], revision_id)
+        report = bind_application_evaluation(
+            revision,
+            AnswerBenchmarkReport(
+                dataset_digest="a" * 64,
+                case_count=1,
+                fact_count=1,
+                metrics=AnswerBenchmarkMetrics(1.0, 1.0, 1.0, 1.0, 1.0),
+                results=(),
+            ),
+            generated_at=11.0,
+        )
+        path = f"/v1/applications/{application['id']}/revisions/{revision_id}/evaluations"
+
+        saved = self.client.post(path, headers=self.headers, json={"report": report.to_dict()})
+
+        self.assertEqual(saved.status_code, 200, saved.text)
+        self.assertEqual(saved.json()["configuration_digest"], report.configuration_digest)
+        listed = self.client.get(path, headers=self.headers)
+        self.assertEqual(listed.json()["count"], 1)
+        invalid = self.client.post(path, headers=self.headers, json={"report": {"invalid": True}})
+        self.assertEqual(invalid.status_code, 422)
 
     def _create_revision(self, application_id: str, summary: str, *, allow_cloud: bool) -> str:
         response = self.client.post(

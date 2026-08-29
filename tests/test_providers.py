@@ -195,6 +195,18 @@ class ZhipuChatModelTests(unittest.TestCase):
         self.assertNotIn("sensitive", str(caught.exception))
         self.assertNotIn("test-private-key", str(caught.exception))
 
+    def test_answer_with_model_sends_the_resolved_profile_model(self) -> None:
+        session = FakeSession(
+            FakeResponse(200, {"choices": [{"message": {"content": '{"claims":[],"insufficient":true}'}}]})
+        )
+        model = ZhipuChatModel(configured_settings(), session=session, sleeper=lambda _: None)
+
+        self.assertEqual(
+            model.answer_with_model("问题", [], model="glm-4.5-air"),
+            GeneratedAnswer((), insufficient=True),
+        )
+        self.assertEqual(session.calls[0]["json"]["model"], "glm-4.5-air")
+
     def test_retryable_429_can_recover_within_bound(self) -> None:
         delays: list[float] = []
         session = FakeSession(

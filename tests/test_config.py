@@ -98,6 +98,20 @@ class ConfigurationTests(unittest.TestCase):
         self.assertGreaterEqual(settings.job_history_max_per_tenant, settings.max_jobs)
         self.assertEqual(settings.product_name, "RAG Platform")
 
+    def test_model_profiles_resolve_to_explicit_provider_models(self) -> None:
+        settings = replace(
+            Settings(),
+            model_profile_ids=("default", "fast"),
+            model_profile_models=(("default", "glm-5.2"), ("fast", "glm-4.5-air")),
+        ).validate()
+
+        self.assertEqual(settings.model_for_profile("default"), "glm-5.2")
+        self.assertEqual(settings.model_for_profile("fast"), "glm-4.5-air")
+        with self.assertRaisesRegex(ValueError, "unsupported"):
+            settings.model_for_profile("missing")
+        with self.assertRaisesRegex(ValueError, "exactly"):
+            replace(settings, model_profile_models=(("default", "glm-5.2"),)).validate()
+
     def test_invalid_chunking_and_url_are_rejected(self) -> None:
         settings = Settings()
         with self.assertRaises(ValueError):

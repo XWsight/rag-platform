@@ -330,6 +330,12 @@ class ApplicationEvaluationResponse(StrictModel):
     benchmark: dict[str, Any]
 
 
+class ApplicationEvaluationCreatePayload(StrictModel):
+    """One complete, versioned evaluation report produced by a release pipeline."""
+
+    report: dict[str, Any]
+
+
 class ApplicationEvaluationListResponse(StrictModel):
     items: tuple[ApplicationEvaluationResponse, ...]
     count: int = Field(ge=0)
@@ -533,6 +539,7 @@ __all__ = [
     "AnswerResponse",
     "ApplicationAnswerPayload",
     "ApplicationAnswerResponse",
+    "ApplicationEvaluationCreatePayload",
     "ApplicationEvaluationListResponse",
     "ApplicationEvaluationResponse",
     "ApplicationCreatePayload",

@@ -106,6 +106,7 @@ class AnswerRequest:
     deep_research: bool = False
     require_citations: bool = True
     retrieval_profile: str = "default"
+    model_profile_id: str = "default"
 
 
 @dataclass(frozen=True, slots=True)

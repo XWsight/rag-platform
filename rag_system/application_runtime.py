@@ -120,6 +120,7 @@ class KnowledgeApplicationRuntime:
             deep_research=configuration.answer_policy.allow_research,
             require_citations=configuration.answer_policy.require_citations,
             retrieval_profile=configuration.retrieval_profile.value,
+            model_profile_id=configuration.model_profile_id,
         )
         if configuration.session_policy.enabled:
             self._clear_expired_session(
