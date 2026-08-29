@@ -28,8 +28,8 @@ ID 回退为 `ZHIPU_MODEL`。运行时会解析该绑定并将模型名传给供
 
 ## 数据与迁移
 
-`/data/applications.sqlite3` 独立于 Catalog、jobs 与幂等仓储，使用 WAL、短事务和严格 schema。schema v7
-增加持久化 Draft、`retrieval_profile=default|focused`、受信任模型配置引用和版本评测证据；v1 会依次补齐 `allow_cloud=false`、退役审计事件、检索策略、Draft、模型配置和评测表，再迁移到 v7。未知版本、表/索引损坏和无版本旧表
+`/data/applications.sqlite3` 独立于 Catalog、jobs 与幂等仓储，使用 WAL、短事务和严格 schema。schema v8
+增加持久化 Draft、`retrieval_profile=default|focused`、受信任模型配置引用、版本评测证据及显式 Deployment 状态；v1 会依次补齐 `allow_cloud=false`、退役审计事件、检索策略、Draft、模型配置、评测表和 Deployment 状态，再迁移到 v8。每个应用至多有一个 `active` Deployment，后续发布会将旧记录标记为 `superseded`。未知版本、表/索引损坏和无版本旧表
 均拒绝启动。升级前必须执行停写全卷快照；旧镜像不能直接打开迁移后的数据库，回滚必须恢复旧镜像和快照。
 
 ## 发布验证与评测
@@ -53,6 +53,6 @@ Revision 和配置摘要后持久化，再由 GET 接口读取。报告不复制
 ## 运维边界
 
 `/metrics` 中 `operation=application_read|application_manage|application_publish|application_answer` 提供低基数
-应用流量、错误率和延迟信号；绝不以应用、Revision、租户或知识库 ID 作为指标标签。`session_policy.ttl_seconds` 在应用运行时强制清理过期上下文；`require_citations` 控制生成回答是否必须逐条引用证据。`focused` 检索策略只保留最高分证据。配置与版本身份从
+应用流量、错误率和延迟信号；绝不以应用、Revision、租户或知识库 ID 作为指标标签。`session_policy.ttl_seconds` 在应用运行时强制清理过期上下文；`require_citations` 控制生成回答是否必须逐条引用证据。`focused` 检索策略只保留最高分证据。应用回答响应提供白名单化 `diagnostics`（计数、比例和通用错误代码），不会暴露 Provider 文本、密钥、租户或资源标识。配置与版本身份从
 Revision/Deployment/Audit 查询，不从高基数监控标签推断。退役不会擦除 SQLite 页或备份；介质级删除仍按
 全卷保留、加密和密钥销毁策略处理。

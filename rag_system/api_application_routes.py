@@ -34,6 +34,7 @@ from rag_system.api_contract import (
     answer_response,
     application_response,
     application_evaluation_response,
+    application_diagnostics_response,
     binding_response,
     deployment_response,
     draft_response,
@@ -426,6 +427,7 @@ def register_application_routes(
             **result.model_dump(),
             application_id=answer.application_id,
             revision_id=answer.revision_id,
+            diagnostics=application_diagnostics_response(answer.result),
         )
 
 

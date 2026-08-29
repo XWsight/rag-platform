@@ -159,6 +159,49 @@ class KnowledgeApplicationRuntimeTests(unittest.TestCase):
         runtime.answer(self.principal, application.application_id, question="Three", session_id="browser")
         self.assertEqual(len(self.rag.cleared), 1)
 
+    def test_shared_knowledge_base_keeps_application_policies_and_revisions_isolated(self) -> None:
+        first = self.create_application()
+        second = self.create_application()
+        first_revision = self.service.create_knowledge_revision(
+            self.principal,
+            first.application_id,
+            KnowledgeChatConfiguration(
+                knowledge_base_ids=(KB_ONE,), answer_policy=AnswerPolicy(allow_cloud=False)
+            ),
+            change_summary="Private policy",
+        )
+        second_revision = self.service.create_knowledge_revision(
+            self.principal,
+            second.application_id,
+            KnowledgeChatConfiguration(
+                knowledge_base_ids=(KB_ONE,), answer_policy=AnswerPolicy(allow_cloud=True)
+            ),
+            change_summary="Cloud policy",
+        )
+        self.service.publish(self.principal, first.application_id, first_revision.revision_id)
+        self.service.publish(self.principal, second.application_id, second_revision.revision_id)
+        candidate = self.service.create_knowledge_revision(
+            self.principal,
+            first.application_id,
+            KnowledgeChatConfiguration(
+                knowledge_base_ids=(KB_ONE,), answer_policy=AnswerPolicy(allow_cloud=True)
+            ),
+            change_summary="Unpublished candidate",
+        )
+
+        first_answer = self.runtime.answer(
+            self.principal, first.application_id, question="One", session_id="same-browser"
+        )
+        second_answer = self.runtime.answer(
+            self.principal, second.application_id, question="Two", session_id="same-browser"
+        )
+
+        self.assertEqual(first_answer.revision_id, first_revision.revision_id)
+        self.assertEqual(second_answer.revision_id, second_revision.revision_id)
+        self.assertEqual([request.allow_cloud for _, request in self.rag.requests], [False, True])
+        self.assertNotEqual(self.rag.requests[0][1].session_id, self.rag.requests[1][1].session_id)
+        self.assertNotEqual(candidate.revision_id, first_answer.revision_id)
+
 
 if __name__ == "__main__":
     unittest.main()

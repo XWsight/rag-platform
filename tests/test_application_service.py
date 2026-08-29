@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from rag_system.application_contracts import (
     ApplicationAuditEventType,
     ApplicationStatus,
+    DeploymentStatus,
     KnowledgeChatConfiguration,
 )
 from rag_system.application_service import (
@@ -70,7 +71,11 @@ class ApplicationServiceTests(unittest.TestCase):
             tuple(item.revision_id for item in self.store.list_revisions(self.writer, application.application_id)),
             (second.revision_id, first.revision_id),
         )
-        self.assertEqual(len(self.store.list_deployments(self.writer, application.application_id)), 2)
+        deployments = self.store.list_deployments(self.writer, application.application_id)
+        self.assertEqual(len(deployments), 2)
+        statuses = {deployment.revision_id: deployment.status for deployment in deployments}
+        self.assertEqual(statuses[first.revision_id], DeploymentStatus.ACTIVE)
+        self.assertEqual(statuses[second.revision_id], DeploymentStatus.SUPERSEDED)
         self.assertEqual(len(self.store.list_audit_events(self.writer)), 6)
 
     def test_revision_and_publish_require_ready_bound_resources(self) -> None:
