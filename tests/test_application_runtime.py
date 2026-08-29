@@ -102,6 +102,7 @@ class KnowledgeApplicationRuntimeTests(unittest.TestCase):
         self.assertTrue(request.allow_cloud)
         self.assertTrue(request.allow_web)
         self.assertTrue(request.deep_research)
+        self.assertEqual(request.model_profile_id, "default")
         self.assertNotIn("browser-1", request.session_id)
         self.assertEqual(self.rag.cleared, [(KB_ONE, request.session_id)])
 

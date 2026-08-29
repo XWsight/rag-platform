@@ -96,6 +96,7 @@ def _env_text(name: str, default: str) -> str:
 
 
 _MODEL_PROFILE_ID_PATTERN = re.compile(r"[a-z][a-z0-9_-]{0,63}")
+_MODEL_IDENTIFIER_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}")
 
 
 def _env_model_profile_ids(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
@@ -106,6 +107,34 @@ def _env_model_profile_ids(name: str, default: tuple[str, ...]) -> tuple[str, ..
     if len(set(candidates)) != len(candidates):
         raise ValueError(f"{name} cannot contain duplicate model profile IDs")
     return candidates
+
+
+def _env_model_profile_models(name: str) -> tuple[tuple[str, str], ...]:
+    """Read explicit profile-to-model bindings without accepting secret material.
+
+    The legacy profile-ID list remains supported as a set of aliases for the
+    primary chat model.  Supplying this setting makes each profile resolve to a
+    concrete model identifier at request time.
+    """
+
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return ()
+    bindings: list[tuple[str, str]] = []
+    for item in value.split(","):
+        profile_id, separator, model = item.strip().partition("=")
+        if (
+            separator != "="
+            or _MODEL_PROFILE_ID_PATTERN.fullmatch(profile_id) is None
+            or _MODEL_IDENTIFIER_PATTERN.fullmatch(model) is None
+        ):
+            raise ValueError(
+                f"{name} must be a comma-separated list of profile_id=model bindings"
+            )
+        bindings.append((profile_id, model))
+    if len({profile_id for profile_id, _ in bindings}) != len(bindings):
+        raise ValueError(f"{name} cannot contain duplicate model profile IDs")
+    return tuple(bindings)
 
 
 @dataclass(frozen=True, slots=True)
@@ -251,10 +280,26 @@ class Settings:
     model_profile_ids: tuple[str, ...] = field(
         default_factory=lambda: _env_model_profile_ids("RAG_MODEL_PROFILE_IDS", ("default",))
     )
+    model_profile_models: tuple[tuple[str, str], ...] = field(
+        default_factory=lambda: _env_model_profile_models("RAG_MODEL_PROFILE_MODELS")
+    )
 
     @property
     def default_document(self) -> Path:
         return self.project_root / "data" / "knowledge.txt"
+
+    def model_for_profile(self, profile_id: str) -> str:
+        """Resolve one trusted profile to the concrete provider model name."""
+
+        explicit_models = dict(self.model_profile_models)
+        if explicit_models:
+            try:
+                return explicit_models[profile_id]
+            except KeyError as error:
+                raise ValueError("model_profile_id is unsupported") from error
+        if profile_id not in self.model_profile_ids:
+            raise ValueError("model_profile_id is unsupported")
+        return self.chat_model
 
     def validate(self) -> Settings:
         if not str(self.storage_root).strip():
@@ -346,6 +391,12 @@ class Settings:
             raise ValueError("research web query limit must fit within research query limit")
         if not self.model_profile_ids:
             raise ValueError("at least one trusted model profile is required")
+        if self.model_profile_models and {
+            profile_id for profile_id, _ in self.model_profile_models
+        } != set(self.model_profile_ids):
+            raise ValueError(
+                "RAG_MODEL_PROFILE_MODELS must bind exactly the trusted model profile IDs"
+            )
         self._validate_https_url("chat_url", self.chat_url)
         self._validate_https_url("search_url", self.search_url)
         return self

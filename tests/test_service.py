@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from contextlib import contextmanager
+from dataclasses import replace
 
 from rag_system.config import Settings
 from rag_system.domain import (
@@ -66,6 +67,16 @@ class FakeChat:
         return self.response
 
 
+class ProfileAwareChat(FakeChat):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.models: list[str] = []
+
+    def answer_with_model(self, question, evidence, *, model: str):
+        self.models.append(model)
+        return self.answer(question, evidence)
+
+
 class FakeWeb:
     def __init__(self, results=(), *, available=True, error=None):
         self.results = results
@@ -94,6 +105,16 @@ class FakePlanner:
         return self.queries[:max_queries]
 
 
+class ProfileAwarePlanner(FakePlanner):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.models: list[str] = []
+
+    def plan_queries_with_model(self, question, *, max_queries, model: str):
+        self.models.append(model)
+        return self.plan_queries(question, max_queries=max_queries)
+
+
 def make_hit(score: float, reasons=("dense", "sparse")) -> SearchHit:
     text = "RAG 使用检索到的资料生成答案。"
     chunk = Chunk("chunk", "doc", "guide.md", text, 0, 0, len(text), "原理")
@@ -120,6 +141,52 @@ class RagServiceTests(unittest.TestCase):
         self.assertEqual(chat.calls, 1)
         self.assertEqual(web.calls, 0)
         self.assertEqual(result.citations[0].citation_id, "L1")
+
+    def test_answer_resolves_the_requested_model_profile_for_profile_aware_provider(self) -> None:
+        chat = ProfileAwareChat()
+        settings = replace(
+            Settings(),
+            model_profile_ids=("default", "fast"),
+            model_profile_models=(("default", "glm-5.2"), ("fast", "glm-4.5-air")),
+        )
+        service = RagService(
+            settings,
+            FakeIndexManager(FakeRetriever([make_hit(0.9)])),
+            chat,
+            FakeWeb(),
+        )
+
+        service.answer(
+            "idx",
+            AnswerRequest("What is RAG?", "profile-session", allow_cloud=True, model_profile_id="fast"),
+        )
+
+        self.assertEqual(chat.models, ["glm-4.5-air"])
+
+    def test_research_planning_uses_the_same_resolved_model_profile(self) -> None:
+        planner = ProfileAwarePlanner(("RAG sources",))
+        settings = replace(
+            Settings(),
+            model_profile_ids=("default", "fast"),
+            model_profile_models=(("default", "glm-5.2"), ("fast", "glm-4.5-air")),
+        )
+        service = RagService(
+            settings,
+            FakeIndexManager(FakeRetriever([make_hit(0.9)])),
+            ProfileAwareChat(),
+            FakeWeb(),
+            query_planner=planner,
+        )
+
+        service.answer(
+            "idx",
+            AnswerRequest(
+                "What is RAG?", "research-session", allow_cloud=True, deep_research=True,
+                model_profile_id="fast",
+            ),
+        )
+
+        self.assertEqual(planner.models, ["glm-4.5-air"])
 
     def test_multiple_indexes_are_fused_before_one_answer_is_generated(self) -> None:
         first_chunk = Chunk("chunk-a", "doc-a", "alpha.md", "Alpha evidence", 0, 0, 14)

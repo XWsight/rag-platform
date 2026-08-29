@@ -109,6 +109,7 @@ class RagService:
             raise ValueError("index_ids cannot contain duplicates")
         if request.retrieval_profile not in {"default", "focused"}:
             raise ValueError("retrieval_profile is unsupported")
+        model_name = self.settings.model_for_profile(request.model_profile_id)
         evidence_count = (
             1 if request.retrieval_profile == "focused" else self.settings.final_evidence_count
         )
@@ -122,7 +123,7 @@ class RagService:
 
         history_turns = len(self.memory.history(request.session_id))
         retrieval_query = self._retrieval_query(request.session_id, question)
-        query_plan, planning_error = self._query_plan(question, request)
+        query_plan, planning_error = self._query_plan(question, request, model_name)
         retrieval_queries = (retrieval_query, *query_plan[1:])
         try:
             with ExitStack() as stack:
@@ -251,7 +252,12 @@ class RagService:
             answer = self._retrieval_only_answer(citations)
         else:
             try:
-                generated_answer = self.chat_model.answer(question, evidence)
+                answer_with_model = getattr(self.chat_model, "answer_with_model", None)
+                generated_answer = (
+                    answer_with_model(question, evidence, model=model_name)
+                    if callable(answer_with_model)
+                    else self.chat_model.answer(question, evidence)
+                )
                 allowed_ids = tuple(citation.citation_id for citation in citations)
                 grounding_audit = validate_grounded_answer(
                     generated_answer,
@@ -316,6 +322,7 @@ class RagService:
         self,
         question: str,
         request: AnswerRequest,
+        model_name: str,
     ) -> tuple[tuple[str, ...], str]:
         planned: Sequence[str] = ()
         planning_error = ""
@@ -324,9 +331,18 @@ class RagService:
                 planning_error = "planner_unavailable"
             else:
                 try:
-                    planned = self.query_planner.plan_queries(
-                        question,
-                        max_queries=self.settings.research_max_queries,
+                    plan_with_model = getattr(self.query_planner, "plan_queries_with_model", None)
+                    planned = (
+                        plan_with_model(
+                            question,
+                            max_queries=self.settings.research_max_queries,
+                            model=model_name,
+                        )
+                        if callable(plan_with_model)
+                        else self.query_planner.plan_queries(
+                            question,
+                            max_queries=self.settings.research_max_queries,
+                        )
                     )
                 except (ProviderError, ValueError) as error:
                     planning_error = type(error).__name__

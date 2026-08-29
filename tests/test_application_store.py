@@ -253,6 +253,65 @@ class ApplicationStoreTests(unittest.TestCase):
         self.assertEqual(draft.version, 0)
         self.assertIsNone(draft.configuration)
 
+    def test_schema_migrates_nonempty_v5_revision_and_draft_model_profiles(self) -> None:
+        project = self.store.create_project(self.tenant_a, self.project())
+        application = self.store.create_application(self.tenant_a, self.application(project))
+        revision, binding = self.revision_and_binding(application)
+        self.store.create_revision(self.tenant_a, revision, (binding,))
+        with closing(sqlite3.connect(self.database)) as connection:
+            raw = connection.execute(
+                "SELECT configuration_json FROM application_revisions WHERE revision_id = ?",
+                (revision.revision_id,),
+            ).fetchone()[0]
+            legacy_configuration = json.loads(raw)
+            del legacy_configuration["model_profile_id"]
+            encoded = json.dumps(legacy_configuration, separators=(",", ":"), sort_keys=True)
+            connection.execute(
+                "UPDATE application_revisions SET configuration_json = ? WHERE revision_id = ?",
+                (encoded, revision.revision_id),
+            )
+            connection.execute(
+                "UPDATE application_drafts SET version = 1, configuration_json = ?, "
+                "change_summary = ? WHERE application_id = ?",
+                (encoded, "Prepared legacy draft.", application.application_id),
+            )
+            connection.execute("DROP TABLE application_evaluations")
+            connection.execute("PRAGMA user_version = 5")
+            connection.commit()
+
+        migrated = ApplicationStore(self.database)
+
+        self.assertEqual(
+            migrated.get_revision(self.tenant_a, application.application_id, revision.revision_id)
+            .configuration.model_profile_id,
+            "default",
+        )
+        self.assertEqual(
+            migrated.get_draft(self.tenant_a, application.application_id).configuration.model_profile_id,
+            "default",
+        )
+
+    def test_schema_migrates_v6_to_v7_with_evaluation_table_and_index(self) -> None:
+        with closing(sqlite3.connect(self.database)) as connection:
+            connection.execute("DROP TABLE application_evaluations")
+            connection.execute("PRAGMA user_version = 6")
+            connection.commit()
+
+        ApplicationStore(self.database)
+
+        with closing(sqlite3.connect(self.database)) as connection:
+            self.assertIsNotNone(
+                connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'application_evaluations'"
+                ).fetchone()
+            )
+            self.assertIsNotNone(
+                connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'index' "
+                    "AND name = 'idx_application_evaluations_revision_generated'"
+                ).fetchone()
+            )
+
     def test_schema_rejects_a_missing_custom_index_without_rewriting_data(self) -> None:
         with closing(sqlite3.connect(self.database)) as connection:
             connection.execute("DROP INDEX idx_revisions_application_number")
