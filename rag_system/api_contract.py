@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import re
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -15,6 +17,7 @@ from rag_system.application_contracts import (
     AuditEvent,
     Deployment,
     DeploymentEnvironment,
+    DeploymentStatus,
     Project,
     ResourceAccessMode,
     ResourceBinding,
@@ -157,9 +160,23 @@ class ApplicationAnswerPayload(StrictModel):
     session_id: str = Field(min_length=1, max_length=128, pattern=SESSION_PATTERN)
 
 
+class ApplicationDiagnosticsResponse(StrictModel):
+    """Small, redaction-safe operational evidence for one application answer."""
+
+    evidence_count: int | None = Field(default=None, ge=0)
+    history_turns: int | None = Field(default=None, ge=0)
+    planned_query_count: int | None = Field(default=None, ge=0)
+    web_query_count: int | None = Field(default=None, ge=0)
+    citation_completeness: float | None = Field(default=None, ge=0, le=1)
+    planning_error: str | None = Field(default=None, max_length=80, pattern=r"^[A-Za-z][A-Za-z0-9_]*$")
+    web_error: str | None = Field(default=None, max_length=80, pattern=r"^[A-Za-z][A-Za-z0-9_]*$")
+    provider_error: str | None = Field(default=None, max_length=80, pattern=r"^[A-Za-z][A-Za-z0-9_]*$")
+
+
 class ApplicationAnswerResponse(AnswerResponse):
     application_id: str = Field(min_length=1, max_length=128)
     revision_id: str = Field(min_length=1, max_length=128)
+    diagnostics: ApplicationDiagnosticsResponse
 
 
 class ProjectCreatePayload(StrictModel):
@@ -281,6 +298,7 @@ class DeploymentResponse(StrictModel):
     application_id: str
     revision_id: str
     environment: DeploymentEnvironment
+    status: DeploymentStatus
     deployed_at: float
     deployed_by: str
 
@@ -429,6 +447,7 @@ def deployment_response(deployment: Deployment) -> DeploymentResponse:
         application_id=deployment.application_id,
         revision_id=deployment.revision_id,
         environment=deployment.environment,
+        status=deployment.status,
         deployed_at=deployment.deployed_at,
         deployed_by=deployment.deployed_by,
     )
@@ -534,11 +553,44 @@ def answer_response(result: AnswerResult, *, trace_id: str) -> AnswerResponse:
     )
 
 
+def application_diagnostics_response(result: AnswerResult) -> ApplicationDiagnosticsResponse:
+    """Expose only known bounded diagnostic values, never opaque provider detail."""
+
+    diagnostics = result.diagnostics
+
+    def nonnegative_int(name: str) -> int | None:
+        value = diagnostics.get(name)
+        return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+    def fraction(name: str) -> float | None:
+        value = diagnostics.get(name)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        normalized = float(value)
+        return normalized if math.isfinite(normalized) and 0 <= normalized <= 1 else None
+
+    def error_code(name: str) -> str | None:
+        value = diagnostics.get(name)
+        return value if isinstance(value, str) and re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,79}", value) else None
+
+    return ApplicationDiagnosticsResponse(
+        evidence_count=nonnegative_int("evidence_count"),
+        history_turns=nonnegative_int("history_turns"),
+        planned_query_count=nonnegative_int("planned_query_count"),
+        web_query_count=nonnegative_int("web_query_count"),
+        citation_completeness=fraction("citation_completeness"),
+        planning_error=error_code("planning_error"),
+        web_error=error_code("web_error"),
+        provider_error=error_code("provider_error"),
+    )
+
+
 __all__ = [
     "AnswerPayload",
     "AnswerResponse",
     "ApplicationAnswerPayload",
     "ApplicationAnswerResponse",
+    "ApplicationDiagnosticsResponse",
     "ApplicationEvaluationCreatePayload",
     "ApplicationEvaluationListResponse",
     "ApplicationEvaluationResponse",
@@ -575,6 +627,7 @@ __all__ = [
     "RESOURCE_PATTERN",
     "SESSION_PATTERN",
     "answer_response",
+    "application_diagnostics_response",
     "application_evaluation_response",
     "application_response",
     "audit_event_response",

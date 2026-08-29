@@ -57,6 +57,13 @@ class DeploymentEnvironment(StrEnum):
     PRODUCTION = "production"
 
 
+class DeploymentStatus(StrEnum):
+    """Lifecycle state of one immutable deployment record."""
+
+    ACTIVE = "active"
+    SUPERSEDED = "superseded"
+
+
 class ResourceKind(StrEnum):
     KNOWLEDGE_BASE = "knowledge_base"
 
@@ -265,6 +272,7 @@ class Deployment:
     environment: DeploymentEnvironment
     deployed_at: float
     deployed_by: str
+    status: DeploymentStatus = DeploymentStatus.ACTIVE
 
     def __post_init__(self) -> None:
         validate_deployment_id(self.deployment_id)
@@ -272,6 +280,8 @@ class Deployment:
         validate_revision_id(self.revision_id)
         if not isinstance(self.environment, DeploymentEnvironment):
             raise ApplicationValidationError("environment must be a DeploymentEnvironment.")
+        if not isinstance(self.status, DeploymentStatus):
+            raise ApplicationValidationError("status must be a DeploymentStatus.")
         if not is_valid_timestamp(self.deployed_at):
             raise ApplicationValidationError("deployed_at must be finite and non-negative.")
         object.__setattr__(self, "deployed_by", validate_subject(self.deployed_by))
@@ -467,6 +477,7 @@ __all__ = [
     "AuditEvent",
     "Deployment",
     "DeploymentEnvironment",
+    "DeploymentStatus",
     "KnowledgeChatConfiguration",
     "Project",
     "ResourceAccessMode",

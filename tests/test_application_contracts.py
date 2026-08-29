@@ -16,6 +16,7 @@ from rag_system.application_contracts import (
     AuditEvent,
     Deployment,
     DeploymentEnvironment,
+    DeploymentStatus,
     KnowledgeChatConfiguration,
     Project,
     ResourceAccessMode,
@@ -177,6 +178,7 @@ class ApplicationContractTests(unittest.TestCase):
         )
 
         self.assertEqual(deployment.environment, DeploymentEnvironment.PRODUCTION)
+        self.assertEqual(deployment.status, DeploymentStatus.ACTIVE)
         self.assertEqual(binding.resource_id, KNOWLEDGE_BASE_ID)
         with self.assertRaises(ApplicationValidationError):
             ResourceBinding(
@@ -231,6 +233,16 @@ class ApplicationContractTests(unittest.TestCase):
                 environment=DeploymentEnvironment.PRODUCTION,
                 deployed_at=math.inf,
                 deployed_by="operator@example.com",
+            )
+        with self.assertRaises(ApplicationValidationError):
+            Deployment(
+                deployment_id=DEPLOYMENT_ID,
+                application_id=APPLICATION_ID,
+                revision_id=REVISION_ID,
+                environment=DeploymentEnvironment.PRODUCTION,
+                deployed_at=4.0,
+                deployed_by="operator@example.com",
+                status="active",  # type: ignore[arg-type]
             )
 
 

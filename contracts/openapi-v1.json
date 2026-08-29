@@ -138,6 +138,9 @@
             "decision": {
               "$ref": "#/components/schemas/RouteResponse"
             },
+            "diagnostics": {
+              "$ref": "#/components/schemas/ApplicationDiagnosticsResponse"
+            },
             "latency_ms": {
               "minimum": 0.0,
               "title": "Latency Ms",
@@ -164,7 +167,8 @@
             "trace_id",
             "latency_ms",
             "application_id",
-            "revision_id"
+            "revision_id",
+            "diagnostics"
           ],
           "title": "ApplicationAnswerResponse",
           "type": "object"
@@ -194,6 +198,114 @@
             "display_name"
           ],
           "title": "ApplicationCreatePayload",
+          "type": "object"
+        },
+        "ApplicationDiagnosticsResponse": {
+          "additionalProperties": false,
+          "description": "Small, redaction-safe operational evidence for one application answer.",
+          "properties": {
+            "citation_completeness": {
+              "anyOf": [
+                {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Citation Completeness"
+            },
+            "evidence_count": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Evidence Count"
+            },
+            "history_turns": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "History Turns"
+            },
+            "planned_query_count": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Planned Query Count"
+            },
+            "planning_error": {
+              "anyOf": [
+                {
+                  "maxLength": 80,
+                  "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Planning Error"
+            },
+            "provider_error": {
+              "anyOf": [
+                {
+                  "maxLength": 80,
+                  "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Provider Error"
+            },
+            "web_error": {
+              "anyOf": [
+                {
+                  "maxLength": 80,
+                  "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Web Error"
+            },
+            "web_query_count": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Web Query Count"
+            }
+          },
+          "title": "ApplicationDiagnosticsResponse",
           "type": "object"
         },
         "ApplicationEvaluationCreatePayload": {
@@ -705,6 +817,9 @@
             "revision_id": {
               "title": "Revision Id",
               "type": "string"
+            },
+            "status": {
+              "$ref": "#/components/schemas/DeploymentStatus"
             }
           },
           "required": [
@@ -712,11 +827,21 @@
             "application_id",
             "revision_id",
             "environment",
+            "status",
             "deployed_at",
             "deployed_by"
           ],
           "title": "DeploymentResponse",
           "type": "object"
+        },
+        "DeploymentStatus": {
+          "description": "Lifecycle state of one immutable deployment record.",
+          "enum": [
+            "active",
+            "superseded"
+          ],
+          "title": "DeploymentStatus",
+          "type": "string"
         },
         "DocumentResponse": {
           "additionalProperties": false,

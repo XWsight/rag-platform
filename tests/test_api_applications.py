@@ -91,6 +91,8 @@ class ApplicationApiTests(unittest.TestCase):
         self.assertEqual(answer.json()["application_id"], application_id)
         self.assertEqual(answer.json()["revision_id"], second)
         self.assertTrue(answer.json()["trace_id"])
+        self.assertIn("diagnostics", answer.json())
+        self.assertNotIn("internal_secret", answer.json()["diagnostics"])
         self.assertTrue(self.platform.last_answer_request.allow_cloud)
 
         rolled_back = self.client.post(
@@ -100,6 +102,14 @@ class ApplicationApiTests(unittest.TestCase):
         self.assertEqual(rolled_back.status_code, 200)
         active = self.client.get(f"/v1/applications/{application_id}", headers=self.headers)
         self.assertEqual(active.json()["active_revision_id"], first)
+        deployment_history = self.client.get(
+            f"/v1/applications/{application_id}/deployments", headers=self.headers
+        )
+        deployment_statuses = {
+            item["revision_id"]: item["status"] for item in deployment_history.json()["items"]
+        }
+        self.assertEqual(deployment_statuses[first], "active")
+        self.assertEqual(deployment_statuses[second], "superseded")
         self.assertEqual(
             self.client.get(
                 f"/v1/applications/{application_id}/revisions", headers=self.headers

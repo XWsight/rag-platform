@@ -4,6 +4,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from rag_system.application_contracts import (
     AuditEvent,
     Deployment,
     DeploymentEnvironment,
+    DeploymentStatus,
     KnowledgeChatConfiguration,
     Project,
     ResourceAccessMode,
@@ -25,6 +27,7 @@ from rag_system.application_contracts import (
     ResourceKind,
 )
 from rag_system.application_store import (
+    ApplicationPublishConflictError,
     ApplicationRevisionUnavailableError,
     ApplicationStore,
     ApplicationStoreSchemaError,
@@ -114,6 +117,7 @@ class ApplicationStoreTests(unittest.TestCase):
             environment=DeploymentEnvironment.PRODUCTION,
             deployed_at=4.0,
             deployed_by=self.tenant_a.subject,
+            status=DeploymentStatus.SUPERSEDED,
         )
         self.store.create_deployment(self.tenant_a, deployment)
         event = AuditEvent(
@@ -199,7 +203,7 @@ class ApplicationStoreTests(unittest.TestCase):
         with closing(sqlite3.connect(self.database)) as connection:
             self.assertEqual(connection.execute("PRAGMA journal_mode").fetchone()[0].lower(), "wal")
             self.assertEqual(connection.execute("PRAGMA foreign_keys").fetchone()[0], 0)
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 7)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 8)
         project = self.project()
         self.store.create_project(self.tenant_a, project)
         with self.assertRaises(ApplicationStoreStorageError):
@@ -236,7 +240,7 @@ class ApplicationStoreTests(unittest.TestCase):
             ).configuration.answer_policy.allow_cloud
         )
         with closing(sqlite3.connect(self.database)) as connection:
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 7)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 8)
 
     def test_schema_migrates_v4_records_to_an_empty_draft(self) -> None:
         project = self.store.create_project(self.tenant_a, self.project())
@@ -291,26 +295,144 @@ class ApplicationStoreTests(unittest.TestCase):
             "default",
         )
 
-    def test_schema_migrates_v6_to_v7_with_evaluation_table_and_index(self) -> None:
+    def test_schema_migrates_v7_to_v8_with_one_explicit_active_deployment(self) -> None:
+        project = self.store.create_project(self.tenant_a, self.project())
+        application = self.store.create_application(self.tenant_a, self.application(project))
+        revision, binding = self.revision_and_binding(application)
+        self.store.create_revision(self.tenant_a, revision, (binding,))
+        deployment = Deployment(
+            deployment_id=identifier("dep", "1"),
+            application_id=application.application_id,
+            revision_id=revision.revision_id,
+            environment=DeploymentEnvironment.PRODUCTION,
+            deployed_at=4.0,
+            deployed_by=self.tenant_a.subject,
+        )
+        event = AuditEvent(
+            audit_event_id=identifier("audit", "1"),
+            tenant_id=self.tenant_a.tenant_id,
+            event_type=ApplicationAuditEventType.DEPLOYMENT_CREATED,
+            occurred_at=4.0,
+            actor=self.tenant_a.subject,
+            summary="Published the initial revision.",
+            project_id=project.project_id,
+            application_id=application.application_id,
+            revision_id=revision.revision_id,
+        )
+        self.store.publish(self.tenant_a, deployment, event, updated_at=4.0)
         with closing(sqlite3.connect(self.database)) as connection:
-            connection.execute("DROP TABLE application_evaluations")
-            connection.execute("PRAGMA user_version = 6")
+            connection.execute("DROP INDEX idx_deployments_one_active_per_application")
+            connection.execute("ALTER TABLE deployments RENAME TO deployments_v8")
+            connection.execute(
+                "CREATE TABLE deployments (deployment_id TEXT PRIMARY KEY NOT NULL, "
+                "application_id TEXT NOT NULL, revision_id TEXT NOT NULL, environment TEXT NOT NULL, "
+                "deployed_at REAL NOT NULL, deployed_by TEXT NOT NULL)"
+            )
+            connection.execute(
+                "INSERT INTO deployments (deployment_id, application_id, revision_id, environment, deployed_at, deployed_by) "
+                "SELECT deployment_id, application_id, revision_id, environment, deployed_at, deployed_by FROM deployments_v8"
+            )
+            connection.execute("DROP TABLE deployments_v8")
+            connection.execute(
+                "CREATE INDEX idx_deployments_application_deployed "
+                "ON deployments (application_id, deployed_at DESC, deployment_id DESC)"
+            )
+            connection.execute("PRAGMA user_version = 7")
             connection.commit()
 
-        ApplicationStore(self.database)
+        migrated = ApplicationStore(self.database)
 
-        with closing(sqlite3.connect(self.database)) as connection:
-            self.assertIsNotNone(
-                connection.execute(
-                    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'application_evaluations'"
-                ).fetchone()
+        self.assertEqual(
+            migrated.list_deployments(self.tenant_a, application.application_id)[0].status,
+            DeploymentStatus.ACTIVE,
+        )
+
+    def test_concurrent_publish_across_store_instances_has_one_winner(self) -> None:
+        project = self.store.create_project(self.tenant_a, self.project())
+        application = self.store.create_application(self.tenant_a, self.application(project))
+        first_revision, first_binding = self.revision_and_binding(application, suffix="1")
+        second_revision, second_binding = self.revision_and_binding(
+            application, suffix="2", revision_number=2
+        )
+        self.store.create_revision(self.tenant_a, first_revision, (first_binding,))
+        self.store.create_revision(self.tenant_a, second_revision, (second_binding,))
+
+        def publish(revision: ApplicationRevision, suffix: str) -> Application:
+            deployment = Deployment(
+                deployment_id=identifier("dep", suffix),
+                application_id=application.application_id,
+                revision_id=revision.revision_id,
+                environment=DeploymentEnvironment.PRODUCTION,
+                deployed_at=4.0,
+                deployed_by=self.tenant_a.subject,
             )
-            self.assertIsNotNone(
-                connection.execute(
-                    "SELECT name FROM sqlite_master WHERE type = 'index' "
-                    "AND name = 'idx_application_evaluations_revision_generated'"
-                ).fetchone()
+            event = AuditEvent(
+                audit_event_id=identifier("audit", suffix),
+                tenant_id=self.tenant_a.tenant_id,
+                event_type=ApplicationAuditEventType.DEPLOYMENT_CREATED,
+                occurred_at=4.0,
+                actor=self.tenant_a.subject,
+                summary="Published a competing revision.",
+                project_id=project.project_id,
+                application_id=application.application_id,
+                revision_id=revision.revision_id,
             )
+            return ApplicationStore(self.database).publish(
+                self.tenant_a,
+                deployment,
+                event,
+                updated_at=4.0,
+                expected_active_revision_id=None,
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = (
+                executor.submit(publish, first_revision, "1"),
+                executor.submit(publish, second_revision, "2"),
+            )
+        outcomes = tuple(future.exception() for future in futures)
+
+        self.assertEqual(sum(error is None for error in outcomes), 1)
+        self.assertEqual(sum(isinstance(error, ApplicationPublishConflictError) for error in outcomes), 1)
+        deployments = self.store.list_deployments(self.tenant_a, application.application_id)
+        self.assertEqual(len(deployments), 1)
+        self.assertEqual(deployments[0].status, DeploymentStatus.ACTIVE)
+
+    def test_active_deployment_status_cannot_diverge_from_the_application_pointer(self) -> None:
+        project = self.store.create_project(self.tenant_a, self.project())
+        application = self.store.create_application(self.tenant_a, self.application(project))
+        revision, binding = self.revision_and_binding(application)
+        self.store.create_revision(self.tenant_a, revision, (binding,))
+        deployment = Deployment(
+            deployment_id=identifier("dep", "active"),
+            application_id=application.application_id,
+            revision_id=revision.revision_id,
+            environment=DeploymentEnvironment.PRODUCTION,
+            deployed_at=4.0,
+            deployed_by=self.tenant_a.subject,
+        )
+
+        with self.assertRaises(ApplicationValidationError):
+            self.store.create_deployment(self.tenant_a, deployment)
+
+        historical = Deployment(
+            deployment_id=identifier("dep", "history"),
+            application_id=application.application_id,
+            revision_id=revision.revision_id,
+            environment=DeploymentEnvironment.PRODUCTION,
+            deployed_at=4.0,
+            deployed_by=self.tenant_a.subject,
+            status=DeploymentStatus.SUPERSEDED,
+        )
+        self.assertEqual(self.store.create_deployment(self.tenant_a, historical), historical)
+
+    def test_sqlite_lock_conflict_is_mapped_to_the_store_error(self) -> None:
+        locked_store = ApplicationStore(self.database, timeout_seconds=0.05)
+        with closing(sqlite3.connect(self.database, isolation_level=None)) as connection:
+            connection.execute("BEGIN EXCLUSIVE")
+            with self.assertRaises(ApplicationStoreStorageError):
+                locked_store.create_project(self.tenant_a, self.project(suffix="lock"))
+            connection.execute("ROLLBACK")
 
     def test_schema_rejects_a_missing_custom_index_without_rewriting_data(self) -> None:
         with closing(sqlite3.connect(self.database)) as connection:

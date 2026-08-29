@@ -23,6 +23,7 @@ from rag_system.application_contracts import (
     AuditEvent,
     Deployment,
     DeploymentEnvironment,
+    DeploymentStatus,
     KnowledgeChatConfiguration,
     Project,
     ResourceAccessMode,
@@ -46,7 +47,7 @@ from rag_system.sqlite_support import SqliteDatabase
 from rag_system.tenancy import Principal, TenantId
 
 
-_SCHEMA_VERSION = 7
+_SCHEMA_VERSION = 8
 _MAX_LIST_LIMIT = 100
 _MAX_CONFIGURATION_BYTES = 64 * 1024
 _UNSET = object()
@@ -438,6 +439,7 @@ class ApplicationStore:
     def create_deployment(self, principal: Principal, deployment: Deployment) -> Deployment:
         tenant_id = _principal_tenant(principal)
         with self._write_lock, self._write_transaction() as connection:
+            application = self._require_application(connection, tenant_id, deployment.application_id)
             if self._select_revision(
                 connection,
                 tenant_id,
@@ -445,18 +447,26 @@ class ApplicationStore:
                 deployment.revision_id,
             ) is None:
                 raise ApplicationRevisionUnavailableError()
+            if (
+                deployment.status is DeploymentStatus.ACTIVE
+                and application.active_revision_id != deployment.revision_id
+            ):
+                raise ApplicationValidationError(
+                    "Active deployments must match the application's active revision."
+                )
             try:
                 connection.execute(
                     """
                     INSERT INTO deployments (
-                        deployment_id, application_id, revision_id, environment, deployed_at, deployed_by
-                    ) VALUES (?, ?, ?, ?, ?, ?)
+                        deployment_id, application_id, revision_id, environment, status, deployed_at, deployed_by
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         deployment.deployment_id,
                         deployment.application_id,
                         deployment.revision_id,
                         deployment.environment.value,
+                        deployment.status.value,
                         deployment.deployed_at,
                         deployment.deployed_by,
                     ),
@@ -479,6 +489,8 @@ class ApplicationStore:
         tenant_id = _principal_tenant(principal)
         if not is_valid_timestamp(updated_at):
             raise ApplicationValidationError("updated_at must be finite and non-negative.")
+        if deployment.status is not DeploymentStatus.ACTIVE:
+            raise ApplicationValidationError("Published deployments must be active.")
         with self._write_lock, self._write_transaction() as connection:
             application = self._require_application(connection, tenant_id, deployment.application_id)
             if application.status is not ApplicationStatus.ACTIVE:
@@ -502,16 +514,22 @@ class ApplicationStore:
                     (deployment.revision_id, updated_at, deployment.application_id, tenant_id.value),
                 )
                 connection.execute(
+                    "UPDATE deployments SET status = 'superseded' "
+                    "WHERE application_id = ? AND status = 'active'",
+                    (deployment.application_id,),
+                )
+                connection.execute(
                     """
                     INSERT INTO deployments (
-                        deployment_id, application_id, revision_id, environment, deployed_at, deployed_by
-                    ) VALUES (?, ?, ?, ?, ?, ?)
+                        deployment_id, application_id, revision_id, environment, status, deployed_at, deployed_by
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         deployment.deployment_id,
                         deployment.application_id,
                         deployment.revision_id,
                         deployment.environment.value,
+                        deployment.status.value,
                         deployment.deployed_at,
                         deployment.deployed_by,
                     ),
@@ -678,6 +696,9 @@ class ApplicationStore:
                 version = 6
             if version == 6:
                 self._migrate_v6_to_v7(connection)
+                version = 7
+            if version == 7:
+                self._migrate_v7_to_v8(connection)
             elif version not in {0, _SCHEMA_VERSION}:
                 raise ApplicationStoreSchemaError()
             self._validate_schema(connection)
@@ -779,6 +800,55 @@ class ApplicationStore:
         connection.execute(
             "CREATE INDEX idx_application_evaluations_revision_generated ON "
             "application_evaluations (revision_id, generated_at DESC)"
+        )
+        connection.execute("PRAGMA user_version = 7")
+
+    @staticmethod
+    def _migrate_v7_to_v8(connection: sqlite3.Connection) -> None:
+        """Make the active deployment explicit while preserving deployment history."""
+
+        deployment_columns = {
+            str(row["name"]) for row in connection.execute("PRAGMA table_info(deployments)").fetchall()
+        }
+        if "status" not in deployment_columns:
+            connection.execute("ALTER TABLE deployments RENAME TO deployments_v7")
+            connection.execute(_CREATE_DEPLOYMENTS_SQL)
+            connection.execute(
+                """INSERT INTO deployments (
+                deployment_id, application_id, revision_id, environment, status, deployed_at, deployed_by
+                ) SELECT d.deployment_id, d.application_id, d.revision_id, d.environment,
+                CASE WHEN d.deployment_id = (
+                    SELECT current.deployment_id FROM deployments_v7 AS current
+                    JOIN applications AS a ON a.application_id = current.application_id
+                    WHERE current.application_id = d.application_id
+                    AND current.revision_id = a.active_revision_id
+                    ORDER BY current.deployed_at DESC, current.deployment_id DESC LIMIT 1
+                ) THEN 'active' ELSE 'superseded' END,
+                d.deployed_at, d.deployed_by FROM deployments_v7 AS d"""
+            )
+            connection.execute("DROP TABLE deployments_v7")
+            connection.execute(
+                "CREATE INDEX idx_deployments_application_deployed "
+                "ON deployments (application_id, deployed_at DESC, deployment_id DESC)"
+            )
+        else:
+            connection.execute("UPDATE deployments SET status = 'superseded'")
+            connection.execute(
+                """UPDATE deployments SET status = 'active' WHERE deployment_id IN (
+                SELECT d.deployment_id FROM deployments AS d
+                JOIN applications AS a ON a.application_id = d.application_id
+                WHERE d.revision_id = a.active_revision_id
+                AND d.deployment_id = (
+                    SELECT current.deployment_id FROM deployments AS current
+                    WHERE current.application_id = d.application_id
+                    AND current.revision_id = a.active_revision_id
+                    ORDER BY current.deployed_at DESC, current.deployment_id DESC LIMIT 1
+                )
+                )"""
+            )
+        connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_deployments_one_active_per_application "
+            "ON deployments (application_id) WHERE status = 'active'"
         )
         connection.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
 
@@ -958,7 +1028,20 @@ CREATE TABLE application_evaluations (
 """
 
 
-_CREATE_SCHEMA_SQL = """
+_CREATE_DEPLOYMENTS_SQL = """
+CREATE TABLE deployments (
+    deployment_id TEXT PRIMARY KEY NOT NULL,
+    application_id TEXT NOT NULL REFERENCES applications(application_id),
+    revision_id TEXT NOT NULL REFERENCES application_revisions(revision_id),
+    environment TEXT NOT NULL CHECK (environment IN ('development', 'staging', 'production')),
+    status TEXT NOT NULL CHECK (status IN ('active', 'superseded')),
+    deployed_at REAL NOT NULL CHECK (deployed_at >= 0),
+    deployed_by TEXT NOT NULL
+);
+"""
+
+
+_CREATE_SCHEMA_SQL = f"""
 CREATE TABLE projects (
     project_id TEXT PRIMARY KEY NOT NULL,
     tenant_id TEXT NOT NULL,
@@ -1007,14 +1090,7 @@ CREATE TABLE resource_bindings (
     created_at REAL NOT NULL CHECK (created_at >= 0),
     UNIQUE (revision_id, resource_kind, resource_id)
 );
-CREATE TABLE deployments (
-    deployment_id TEXT PRIMARY KEY NOT NULL,
-    application_id TEXT NOT NULL REFERENCES applications(application_id),
-    revision_id TEXT NOT NULL REFERENCES application_revisions(revision_id),
-    environment TEXT NOT NULL CHECK (environment IN ('development', 'staging', 'production')),
-    deployed_at REAL NOT NULL CHECK (deployed_at >= 0),
-    deployed_by TEXT NOT NULL
-);
+{_CREATE_DEPLOYMENTS_SQL}
 CREATE TABLE application_audit_events (
     audit_event_id TEXT PRIMARY KEY NOT NULL,
     tenant_id TEXT NOT NULL,
@@ -1043,6 +1119,8 @@ CREATE INDEX idx_revisions_application_number
     ON application_revisions (application_id, revision_number DESC);
 CREATE INDEX idx_deployments_application_deployed
     ON deployments (application_id, deployed_at DESC, deployment_id DESC);
+CREATE UNIQUE INDEX idx_deployments_one_active_per_application
+    ON deployments (application_id) WHERE status = 'active';
 CREATE INDEX idx_application_audit_events_tenant_occurred
     ON application_audit_events (tenant_id, occurred_at DESC, audit_event_id DESC);
 CREATE INDEX idx_application_evaluations_revision_generated
@@ -1083,7 +1161,7 @@ _EXPECTED_COLUMNS = {
     "deployments": (
         ("deployment_id", "TEXT", 1, 1), ("application_id", "TEXT", 1, 0),
         ("revision_id", "TEXT", 1, 0), ("environment", "TEXT", 1, 0),
-        ("deployed_at", "REAL", 1, 0), ("deployed_by", "TEXT", 1, 0),
+        ("status", "TEXT", 1, 0), ("deployed_at", "REAL", 1, 0), ("deployed_by", "TEXT", 1, 0),
     ),
     "application_audit_events": (
         ("audit_event_id", "TEXT", 1, 1), ("tenant_id", "TEXT", 1, 0),
@@ -1103,6 +1181,7 @@ _EXPECTED_CUSTOM_INDEXES = {
     "idx_applications_tenant_project_updated": (0, 0),
     "idx_revisions_application_number": (0, 0),
     "idx_deployments_application_deployed": (0, 0),
+    "idx_deployments_one_active_per_application": (1, 1),
     "idx_application_audit_events_tenant_occurred": (0, 0),
     "idx_application_evaluations_revision_generated": (0, 0),
 }
@@ -1114,6 +1193,7 @@ _EXPECTED_INDEX_COLUMNS = {
     ),
     "idx_revisions_application_number": ("application_id", "revision_number"),
     "idx_deployments_application_deployed": ("application_id", "deployed_at", "deployment_id"),
+    "idx_deployments_one_active_per_application": ("application_id",),
     "idx_application_audit_events_tenant_occurred": (
         "tenant_id", "occurred_at", "audit_event_id"
     ),
@@ -1470,6 +1550,7 @@ def _deployment_from_row(row: sqlite3.Row) -> Deployment:
             deployment_id=row["deployment_id"], application_id=row["application_id"],
             revision_id=row["revision_id"], environment=DeploymentEnvironment(row["environment"]),
             deployed_at=row["deployed_at"], deployed_by=row["deployed_by"],
+            status=DeploymentStatus(row["status"]),
         )
     except (ApplicationContractError, KeyError, TypeError, ValueError) as error:
         raise ApplicationStoreSchemaError() from error
