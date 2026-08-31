@@ -8,7 +8,7 @@ provider selection, credentials, or arbitrary expression evaluation.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, cast
 
 from rag_system.tenancy import Principal
 from rag_system.workflow_contracts import WorkflowNode, WorkflowNodeKind
@@ -26,10 +26,10 @@ def built_in_node_executors(
         raise TypeError("retrieve and generate executors must be callable")
     return {
         WorkflowNodeKind.KNOWLEDGE_RETRIEVE: retrieve,
-        WorkflowNodeKind.PROMPT_RENDER: render_prompt,
+        WorkflowNodeKind.PROMPT_RENDER: cast(NativeWorkflowNodeExecutor, render_prompt),
         WorkflowNodeKind.MODEL_GENERATE: generate,
-        WorkflowNodeKind.GROUNDING_VALIDATE: validate_grounding,
-        WorkflowNodeKind.CONDITION: evaluate_condition,
+        WorkflowNodeKind.GROUNDING_VALIDATE: cast(NativeWorkflowNodeExecutor, validate_grounding),
+        WorkflowNodeKind.CONDITION: cast(NativeWorkflowNodeExecutor, evaluate_condition),
     }
 
 
