@@ -389,8 +389,8 @@ def _validate_workflow_graph(
         if match is None:
             raise WorkflowValidationError("workflow output source is invalid")
         node_id, output_name = match.groups()
-        node = node_by_id.get(node_id)
-        if node is None or output_name not in node.output_names:
+        referenced_node = node_by_id.get(node_id)
+        if referenced_node is None or output_name not in referenced_node.output_names:
             raise WorkflowValidationError("workflow output references an unknown node output")
         output_nodes.add(node_id)
 

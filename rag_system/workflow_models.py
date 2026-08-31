@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import cast
 
 from rag_system.application_contracts import (
     is_valid_timestamp,
@@ -264,7 +265,9 @@ class WorkflowApproval:
             return
         if not isinstance(self.decision, ApprovalDecision):
             raise WorkflowModelError("workflow approval decision is invalid")
-        if not is_valid_timestamp(self.decided_at) or float(self.decided_at) < float(self.requested_at):
+        if not is_valid_timestamp(self.decided_at) or _timestamp(self.decided_at) < _timestamp(
+            self.requested_at
+        ):
             raise WorkflowModelError("workflow approval decision timestamp is invalid")
         object.__setattr__(self, "decided_by", validate_subject(self.decided_by))
 
@@ -307,13 +310,17 @@ def _validate_int(value: object, description: str, *, minimum: int, maximum: int
 def _validate_time_range(created_at: object, updated_at: object) -> None:
     if not is_valid_timestamp(created_at) or not is_valid_timestamp(updated_at):
         raise WorkflowModelError("workflow timestamps are invalid")
-    if float(updated_at) < float(created_at):
+    if _timestamp(updated_at) < _timestamp(created_at):
         raise WorkflowModelError("workflow timestamps are invalid")
 
 
 def _validate_optional_timestamp(value: object, description: str) -> None:
     if value is not None and not is_valid_timestamp(value):
         raise WorkflowModelError(f"{description} is invalid")
+
+
+def _timestamp(value: object) -> float:
+    return float(cast(int | float, value))
 
 
 def _validate_digest(value: object, description: str) -> None:

@@ -7,7 +7,7 @@ import sqlite3
 from contextlib import AbstractContextManager
 from pathlib import Path
 from threading import RLock
-from typing import Any
+from typing import Any, cast
 
 from rag_system.sqlite_support import SqliteDatabase
 from rag_system.tenancy import Principal, TenantId
@@ -569,15 +569,20 @@ class WorkflowStore:
             _validate_schema(connection)
 
     def _read(self) -> AbstractContextManager[sqlite3.Connection]:
-        return self._database.read(WorkflowStoreStorageError)
+        return cast(
+            AbstractContextManager[sqlite3.Connection], self._database.read(WorkflowStoreStorageError)
+        )
 
     def _write(self) -> AbstractContextManager[sqlite3.Connection]:
-        return self._database.immediate_transaction(
-            WorkflowStoreStorageError,
-            pass_through=(
-                WorkflowStoreError,
-                WorkflowModelError,
-                WorkflowValidationError,
+        return cast(
+            AbstractContextManager[sqlite3.Connection],
+            self._database.immediate_transaction(
+                WorkflowStoreStorageError,
+                pass_through=(
+                    WorkflowStoreError,
+                    WorkflowModelError,
+                    WorkflowValidationError,
+                ),
             ),
         )
 
@@ -861,7 +866,7 @@ def _require_workflow(connection: sqlite3.Connection, tenant: TenantId, workflow
     ).fetchone()
     if row is None:
         raise WorkflowUnavailableError()
-    return row
+    return cast(sqlite3.Row, row)
 
 
 def _require_revision(
@@ -873,7 +878,7 @@ def _require_revision(
     ).fetchone()
     if row is None:
         raise WorkflowRevisionUnavailableError()
-    return row
+    return cast(sqlite3.Row, row)
 
 
 def _validate_run_transition(current: WorkflowRunStatus, target: WorkflowRunStatus) -> None:
