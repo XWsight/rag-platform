@@ -19,9 +19,11 @@ from rag_system.workflow_models import (
     WorkflowDeployment,
     WorkflowDeploymentStatus,
     WorkflowDraft,
+    WorkflowEvaluation,
     WorkflowModelError,
     WorkflowRevision,
     WorkflowRun,
+    WorkflowRunState,
     WorkflowRunStatus,
     WorkflowStatus,
     WorkflowStepRun,
@@ -33,7 +35,7 @@ from rag_system.workflow_models import (
 from rag_system.workflow_contracts import WorkflowSpec, WorkflowValidationError
 
 
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 3
 _MAX_LIST_LIMIT = 100
 
 
@@ -466,6 +468,74 @@ class WorkflowStore:
             ).fetchall()
         return tuple(_step_from_row(row) for row in rows)
 
+    def save_run_state(self, principal: Principal, state: WorkflowRunState) -> WorkflowRunState:
+        """Persist bounded runtime values needed to resume an approved run."""
+
+        self.get_run(principal, state.run_id)
+        with self._write_lock, self._write() as connection:
+            try:
+                connection.execute(
+                    """INSERT INTO workflow_run_state (run_id, input_json, outputs_json, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(run_id) DO UPDATE SET input_json = excluded.input_json,
+                    outputs_json = excluded.outputs_json, updated_at = excluded.updated_at""",
+                    (state.run_id, state.input_json, state.outputs_json, state.updated_at),
+                )
+            except sqlite3.IntegrityError as error:
+                raise WorkflowStoreStorageError() from error
+        return state
+
+    def get_run_state(self, principal: Principal, run_id: str) -> WorkflowRunState:
+        run = self.get_run(principal, run_id)
+        with self._read() as connection:
+            row = connection.execute(
+                "SELECT * FROM workflow_run_state WHERE run_id = ?", (run.run_id,)
+            ).fetchone()
+        if row is None:
+            raise WorkflowRunUnavailableError()
+        return _run_state_from_row(row)
+
+    def save_evaluation(self, principal: Principal, evaluation: WorkflowEvaluation) -> WorkflowEvaluation:
+        tenant = _tenant(principal)
+        with self._write_lock, self._write() as connection:
+            _require_workflow(connection, tenant, evaluation.workflow_id)
+            revision = _revision_from_row(
+                _require_revision(connection, evaluation.workflow_id, evaluation.revision_id)
+            )
+            if revision.specification_digest != evaluation.specification_digest:
+                raise WorkflowStoreStorageError()
+            try:
+                connection.execute(
+                    """INSERT INTO workflow_evaluations (
+                    evaluation_id, workflow_id, revision_id, specification_digest, generated_at,
+                    case_count, passed_case_count
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        evaluation.evaluation_id, evaluation.workflow_id, evaluation.revision_id,
+                        evaluation.specification_digest, evaluation.generated_at, evaluation.case_count,
+                        evaluation.passed_case_count,
+                    ),
+                )
+            except sqlite3.IntegrityError as error:
+                raise WorkflowStoreStorageError() from error
+        return evaluation
+
+    def list_evaluations(
+        self, principal: Principal, workflow_id: str, revision_id: str, *, limit: int = 50
+    ) -> tuple[WorkflowEvaluation, ...]:
+        tenant = _tenant(principal)
+        clean_workflow_id = _safe_workflow_id(workflow_id)
+        clean_revision_id = _safe_revision_id(revision_id)
+        with self._read() as connection:
+            _require_workflow(connection, tenant, clean_workflow_id)
+            _require_revision(connection, clean_workflow_id, clean_revision_id)
+            rows = connection.execute(
+                """SELECT * FROM workflow_evaluations WHERE workflow_id = ? AND revision_id = ?
+                ORDER BY generated_at DESC, evaluation_id DESC LIMIT ?""",
+                (clean_workflow_id, clean_revision_id, _limit(limit)),
+            ).fetchall()
+        return tuple(_evaluation_from_row(row) for row in rows)
+
     def create_approval(self, principal: Principal, approval: WorkflowApproval) -> WorkflowApproval:
         self.get_run(principal, approval.run_id)
         with self._write_lock, self._write() as connection:
@@ -488,6 +558,29 @@ class WorkflowStore:
             except sqlite3.IntegrityError as error:
                 raise WorkflowStoreStorageError() from error
         return approval
+
+    def get_approval(self, principal: Principal, approval_id: str) -> WorkflowApproval:
+        tenant = _tenant(principal)
+        with self._read() as connection:
+            row = connection.execute(
+                """SELECT approvals.* FROM workflow_approvals AS approvals
+                JOIN workflow_runs AS runs ON runs.run_id = approvals.run_id
+                JOIN workflows AS workflows ON workflows.workflow_id = runs.workflow_id
+                WHERE approvals.approval_id = ? AND workflows.tenant_id = ?""",
+                (approval_id, tenant.value),
+            ).fetchone()
+        if row is None:
+            raise WorkflowApprovalUnavailableError()
+        return _approval_from_row(row)
+
+    def list_approvals(self, principal: Principal, run_id: str) -> tuple[WorkflowApproval, ...]:
+        run = self.get_run(principal, run_id)
+        with self._read() as connection:
+            rows = connection.execute(
+                "SELECT * FROM workflow_approvals WHERE run_id = ? ORDER BY requested_at, approval_id",
+                (run.run_id,),
+            ).fetchall()
+        return tuple(_approval_from_row(row) for row in rows)
 
     def decide_approval(
         self,
@@ -563,6 +656,13 @@ class WorkflowStore:
             version = int(connection.execute("PRAGMA user_version").fetchone()[0])
             if version == 0:
                 _create_schema(connection)
+                connection.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
+            elif version == 1:
+                _migrate_v1_to_v2(connection)
+                _migrate_v2_to_v3(connection)
+                connection.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
+            elif version == 2:
+                _migrate_v2_to_v3(connection)
                 connection.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             elif version != _SCHEMA_VERSION:
                 raise WorkflowStoreSchemaError()
@@ -671,7 +771,51 @@ def _create_schema(connection: sqlite3.Connection) -> None:
         );
         CREATE UNIQUE INDEX workflow_approvals_pending_node
             ON workflow_approvals (run_id, node_id) WHERE decision IS NULL;
+        CREATE TABLE workflow_run_state (
+            run_id TEXT PRIMARY KEY REFERENCES workflow_runs(run_id) ON DELETE RESTRICT,
+            input_json TEXT NOT NULL,
+            outputs_json TEXT NOT NULL,
+            updated_at REAL NOT NULL
+        );
+        CREATE TABLE workflow_evaluations (
+            evaluation_id TEXT PRIMARY KEY,
+            workflow_id TEXT NOT NULL REFERENCES workflows(workflow_id) ON DELETE RESTRICT,
+            revision_id TEXT NOT NULL REFERENCES workflow_revisions(revision_id) ON DELETE RESTRICT,
+            specification_digest TEXT NOT NULL,
+            generated_at REAL NOT NULL,
+            case_count INTEGER NOT NULL,
+            passed_case_count INTEGER NOT NULL
+        );
+        CREATE INDEX workflow_evaluations_revision_generated
+            ON workflow_evaluations (workflow_id, revision_id, generated_at DESC, evaluation_id DESC);
         """
+    )
+
+
+def _migrate_v1_to_v2(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """CREATE TABLE workflow_run_state (
+        run_id TEXT PRIMARY KEY REFERENCES workflow_runs(run_id) ON DELETE RESTRICT,
+        input_json TEXT NOT NULL,
+        outputs_json TEXT NOT NULL,
+        updated_at REAL NOT NULL
+        )"""
+    )
+
+
+def _migrate_v2_to_v3(connection: sqlite3.Connection) -> None:
+    connection.executescript(
+        """CREATE TABLE workflow_evaluations (
+        evaluation_id TEXT PRIMARY KEY,
+        workflow_id TEXT NOT NULL REFERENCES workflows(workflow_id) ON DELETE RESTRICT,
+        revision_id TEXT NOT NULL REFERENCES workflow_revisions(revision_id) ON DELETE RESTRICT,
+        specification_digest TEXT NOT NULL,
+        generated_at REAL NOT NULL,
+        case_count INTEGER NOT NULL,
+        passed_case_count INTEGER NOT NULL
+        );
+        CREATE INDEX workflow_evaluations_revision_generated
+        ON workflow_evaluations (workflow_id, revision_id, generated_at DESC, evaluation_id DESC);"""
     )
 
 
@@ -684,6 +828,8 @@ def _validate_schema(connection: sqlite3.Connection) -> None:
         "workflow_runs",
         "workflow_step_runs",
         "workflow_approvals",
+        "workflow_run_state",
+        "workflow_evaluations",
     }
     actual = {
         str(row["name"])
@@ -776,6 +922,49 @@ def _step_from_row(row: sqlite3.Row) -> WorkflowStepRun:
             input_digest=row["input_digest"],
             output_digest=row["output_digest"],
             error_code=row["error_code"],
+        )
+    except (TypeError, ValueError) as error:
+        raise WorkflowStoreSchemaError() from error
+
+
+def _run_state_from_row(row: sqlite3.Row) -> WorkflowRunState:
+    try:
+        inputs = json.loads(str(row["input_json"]))
+        outputs = json.loads(str(row["outputs_json"]))
+        return WorkflowRunState(
+            run_id=str(row["run_id"]),
+            input_values=inputs,
+            node_outputs=outputs,
+            updated_at=float(row["updated_at"]),
+        )
+    except (TypeError, ValueError, json.JSONDecodeError) as error:
+        raise WorkflowStoreSchemaError() from error
+
+
+def _approval_from_row(row: sqlite3.Row) -> WorkflowApproval:
+    try:
+        raw_decision = row["decision"]
+        return WorkflowApproval(
+            approval_id=str(row["approval_id"]),
+            run_id=str(row["run_id"]),
+            node_id=str(row["node_id"]),
+            requested_at=float(row["requested_at"]),
+            requested_by=str(row["requested_by"]),
+            decision=ApprovalDecision(str(raw_decision)) if raw_decision is not None else None,
+            decided_at=float(row["decided_at"]) if row["decided_at"] is not None else None,
+            decided_by=str(row["decided_by"]) if row["decided_by"] is not None else None,
+        )
+    except (TypeError, ValueError) as error:
+        raise WorkflowStoreSchemaError() from error
+
+
+def _evaluation_from_row(row: sqlite3.Row) -> WorkflowEvaluation:
+    try:
+        return WorkflowEvaluation(
+            evaluation_id=str(row["evaluation_id"]), workflow_id=str(row["workflow_id"]),
+            revision_id=str(row["revision_id"]), specification_digest=str(row["specification_digest"]),
+            generated_at=float(row["generated_at"]), case_count=int(row["case_count"]),
+            passed_case_count=int(row["passed_case_count"]),
         )
     except (TypeError, ValueError) as error:
         raise WorkflowStoreSchemaError() from error

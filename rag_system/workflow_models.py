@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import cast
+from types import MappingProxyType
+from typing import Any, cast
 
 from rag_system.application_contracts import (
     is_valid_timestamp,
@@ -24,6 +27,7 @@ _WORKFLOW_DEPLOYMENT_ID = re.compile(r"wfd_[A-Za-z0-9_-]{32}")
 _WORKFLOW_RUN_ID = re.compile(r"wrun_[A-Za-z0-9_-]{32}")
 _WORKFLOW_STEP_RUN_ID = re.compile(r"wstep_[A-Za-z0-9_-]{32}")
 _WORKFLOW_APPROVAL_ID = re.compile(r"wappr_[A-Za-z0-9_-]{32}")
+_WORKFLOW_EVALUATION_ID = re.compile(r"weval_[A-Za-z0-9_-]{32}")
 _DIGEST = re.compile(r"[0-9a-f]{64}")
 
 
@@ -272,6 +276,91 @@ class WorkflowApproval:
         object.__setattr__(self, "decided_by", validate_subject(self.decided_by))
 
 
+@dataclass(frozen=True, slots=True)
+class WorkflowRunState:
+    """Tenant-protected resumable state for a paused workflow run.
+
+    The workflow definition never contains secrets.  Runtime values are stored
+    only while a run is active or awaiting approval, and are deliberately
+    bounded to keep a single run from exhausting the local durable profile.
+    """
+
+    run_id: str
+    input_values: Mapping[str, Any]
+    node_outputs: Mapping[str, Mapping[str, Any]]
+    updated_at: float
+
+    def __post_init__(self) -> None:
+        validate_workflow_run_id(self.run_id)
+        if not is_valid_timestamp(self.updated_at):
+            raise WorkflowModelError("workflow run state timestamp is invalid")
+        encoded_inputs = _canonical_json_object(self.input_values, "workflow run inputs")
+        normalized_inputs = json.loads(encoded_inputs)
+        normalized_outputs: dict[str, Mapping[str, Any]] = {}
+        if not isinstance(self.node_outputs, Mapping):
+            raise WorkflowModelError("workflow run outputs are invalid")
+        for node_id, output in self.node_outputs.items():
+            if not isinstance(node_id, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", node_id):
+                raise WorkflowModelError("workflow run output node ID is invalid")
+            encoded_output = _canonical_json_object(output, "workflow node output")
+            normalized_outputs[node_id] = MappingProxyType(json.loads(encoded_output))
+        encoded_outputs = json.dumps(
+            {key: dict(value) for key, value in sorted(normalized_outputs.items())},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        if len((encoded_inputs + encoded_outputs).encode("utf-8")) > 512 * 1024:
+            raise WorkflowModelError("workflow run state is too large")
+        object.__setattr__(self, "input_values", MappingProxyType(normalized_inputs))
+        object.__setattr__(self, "node_outputs", MappingProxyType(normalized_outputs))
+
+    @property
+    def input_json(self) -> str:
+        return json.dumps(dict(self.input_values), ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+    @property
+    def outputs_json(self) -> str:
+        return json.dumps(
+            {key: dict(value) for key, value in self.node_outputs.items()},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowEvaluation:
+    """Immutable release evidence tied to the exact workflow specification."""
+
+    evaluation_id: str
+    workflow_id: str
+    revision_id: str
+    specification_digest: str
+    generated_at: float
+    case_count: int
+    passed_case_count: int
+
+    def __post_init__(self) -> None:
+        validate_workflow_evaluation_id(self.evaluation_id)
+        validate_workflow_id(self.workflow_id)
+        validate_workflow_revision_id(self.revision_id)
+        _validate_digest(self.specification_digest, "workflow evaluation specification digest")
+        if not is_valid_timestamp(self.generated_at):
+            raise WorkflowModelError("workflow evaluation timestamp is invalid")
+        _validate_int(self.case_count, "workflow evaluation case count", minimum=1, maximum=100_000)
+        _validate_int(
+            self.passed_case_count, "workflow evaluation passing case count",
+            minimum=0, maximum=self.case_count,
+        )
+
+    @property
+    def passed(self) -> bool:
+        """Production gating is intentionally strict for the first runtime profile."""
+
+        return self.passed_case_count == self.case_count
+
+
 def validate_workflow_id(value: object) -> str:
     return _validate_id(value, _WORKFLOW_ID, "workflow ID")
 
@@ -294,6 +383,10 @@ def validate_workflow_step_run_id(value: object) -> str:
 
 def validate_workflow_approval_id(value: object) -> str:
     return _validate_id(value, _WORKFLOW_APPROVAL_ID, "workflow approval ID")
+
+
+def validate_workflow_evaluation_id(value: object) -> str:
+    return _validate_id(value, _WORKFLOW_EVALUATION_ID, "workflow evaluation ID")
 
 
 def _validate_id(value: object, pattern: re.Pattern[str], description: str) -> str:
@@ -339,6 +432,19 @@ def _validate_error_code(value: object) -> str:
     return value
 
 
+def _canonical_json_object(value: object, description: str) -> str:
+    if not isinstance(value, Mapping):
+        raise WorkflowModelError(f"{description} are invalid")
+    try:
+        encoded = json.dumps(dict(value), ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        decoded = json.loads(encoded)
+    except (TypeError, ValueError) as error:
+        raise WorkflowModelError(f"{description} must be JSON-compatible") from error
+    if not isinstance(decoded, dict):
+        raise WorkflowModelError(f"{description} are invalid")
+    return encoded
+
+
 __all__ = [
     "ApprovalDecision",
     "ExecutionBudget",
@@ -347,15 +453,18 @@ __all__ = [
     "WorkflowDeployment",
     "WorkflowDeploymentStatus",
     "WorkflowDraft",
+    "WorkflowEvaluation",
     "WorkflowModelError",
     "WorkflowRevision",
     "WorkflowRun",
+    "WorkflowRunState",
     "WorkflowRunStatus",
     "WorkflowStatus",
     "WorkflowStepRun",
     "WorkflowStepStatus",
     "validate_workflow_approval_id",
     "validate_workflow_deployment_id",
+    "validate_workflow_evaluation_id",
     "validate_workflow_id",
     "validate_workflow_revision_id",
     "validate_workflow_run_id",
