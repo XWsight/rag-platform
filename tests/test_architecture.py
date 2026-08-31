@@ -32,6 +32,12 @@ FRAMEWORK_NEUTRAL_MODULES = (
     "rag_system/loader_contracts.py",
     "rag_system/retrieval_experiments.py",
     "rag_system/runtime_profile.py",
+    "rag_system/workflow_contracts.py",
+    "rag_system/workflow_models.py",
+    "rag_system/workflow_store.py",
+    "rag_system/workflow_runtime.py",
+    "rag_system/workflow_service.py",
+    "rag_system/workflow_native_nodes.py",
 )
 FORBIDDEN_FRAMEWORK_PREFIXES = (
     "fastapi",
