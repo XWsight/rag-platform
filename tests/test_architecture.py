@@ -37,6 +37,7 @@ FRAMEWORK_NEUTRAL_MODULES = (
     "rag_system/workflow_store.py",
     "rag_system/workflow_runtime.py",
     "rag_system/workflow_service.py",
+    "rag_system/workflow_native_nodes.py",
 )
 FORBIDDEN_FRAMEWORK_PREFIXES = (
     "fastapi",
